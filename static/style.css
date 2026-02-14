@@ -162,6 +162,11 @@ th {
     color: white;
 }
 
+.status.cancelled {
+    background-color: #64748b;
+    color: white;
+}
+
 @keyframes pulse {
     0% {
         opacity: 1;
