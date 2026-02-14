@@ -133,12 +133,19 @@ def worker():
                 with open(log_file_path, 'w') as log_file:
                     # Run the command
                     # merging stdout and stderr for simplicity in logs
+                    
+                    # Create a clean environment for the subprocess
+                    env = os.environ.copy()
+                    # Remove VIRTUAL_ENV to prevent tools like uv from using the scheduler's venv
+                    env.pop('VIRTUAL_ENV', None)
+                    
                     process = subprocess.Popen(
                         command, 
                         shell=True, 
                         stdout=log_file, 
                         stderr=subprocess.STDOUT,
-                        cwd=job.get('cwd', BASE_DIR)
+                        cwd=job.get('cwd', BASE_DIR),
+                        env=env
                     )
                     process.wait()
                     

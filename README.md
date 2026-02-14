@@ -33,6 +33,34 @@ chmod +x run.sh
 
 The application will start at `http://localhost:5000`.
 
+## Installation with uv
+
+If you prefer using [uv](https://github.com/astral-sh/uv) for fast dependency management:
+
+1.  **Install uv** (if not installed):
+    ```bash
+    pip install uv
+    ```
+
+2.  **Create a virtual environment**:
+    ```bash
+    uv venv
+    ```
+
+3.  **Install dependencies**:
+    ```bash
+    uv pip install -r requirements.txt
+    ```
+
+4.  **Run the application**:
+    ```bash
+    # Windows
+    .venv\Scripts\python app.py
+
+    # Linux
+    uv run app.py
+    ```
+
 ## Usage
 
 ### 1. Dashboard
