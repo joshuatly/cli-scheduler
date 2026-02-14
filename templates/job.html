@@ -12,6 +12,11 @@
         </div>
 
         <div style="display: flex; gap: 0.5rem;">
+            {% if job.status in ['queued', 'running'] %}
+            <form action="{{ url_for('cancel_job', job_id=job.id) }}" method="POST" style="display: inline;">
+                <button type="submit" class="btn" style="background-color: #dc3545; color: white;">Cancel</button>
+            </form>
+            {% endif %}
             <a href="{{ url_for('submit', retry_job_id=job.id) }}" class="btn"
                 style="background-color: var(--warning); color: #000;">Edit</a>
             <form action="{{ url_for('rerun_job', job_id=job.id) }}" method="POST" style="display: inline;">

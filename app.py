@@ -23,6 +23,9 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 job_queue = queue.Queue()
 # Lock for config file access only (Jobs are handled by Storage)
 data_lock = threading.Lock()
+# Map to store running processes for cancellation
+process_lock = threading.Lock()
+RUNNING_PROCESSES = {}
 
 # --- Helper Functions ---
 
@@ -147,15 +150,34 @@ def worker():
                         cwd=job.get('cwd', BASE_DIR),
                         env=env
                     )
+                    
+                    with process_lock:
+                        RUNNING_PROCESSES[job_id] = process
+                        
                     process.wait()
                     
                     final_status = 'finished' if process.returncode == 0 else 'failed'
+                    
+                    # If it was cancelled, status might already be 'cancelled' by the API
+                    # But if we killed it, returncode is likely non-zero.
+                    # Let's check if it's still running in our map or if status changed externally?
+                    # Actually, if we kill it, process.wait() returns.
+                    # We should check the current status in DB before overwriting with 'failed' 
+                    # if it was 'cancelled'.
+                    
+                    current_job = get_job(job_id)
+                    if current_job and current_job.get('status') == 'cancelled':
+                        final_status = 'cancelled'
+                    
                     update_job_status(job_id, final_status, process.returncode)
                     
             except Exception as e:
                 with open(log_file_path, 'a') as log_file:
                     log_file.write(f"\n\nSystem Error: {str(e)}\n")
                 update_job_status(job_id, 'failed', -1)
+            finally:
+                with process_lock:
+                    RUNNING_PROCESSES.pop(job_id, None)
             
             job_queue.task_done()
         except Exception as e:
@@ -444,6 +466,44 @@ def rerun_job(job_id):
     job_queue.put(new_job_id)
     
     return redirect(url_for('index'))
+
+@app.route('/job/<job_id>/cancel', methods=['POST'])
+def cancel_job(job_id):
+    job = get_job(job_id)
+    if not job:
+        return "Job not found", 404
+        
+    status = job.get('status')
+    
+    if status in ['finished', 'failed', 'cancelled']:
+        return "Job already finished", 400
+        
+    if status == 'queued':
+        update_job_status(job_id, 'cancelled')
+        # We can't easily remove from queue.Queue, but worker handles it by checking status.
+        return redirect(url_for('job_details', job_id=job_id))
+        
+    if status == 'running':
+        # Try to terminate process
+        update_job_status(job_id, 'cancelled') # Mark as cancelled first
+        
+        with process_lock:
+            process = RUNNING_PROCESSES.get(job_id)
+            if process:
+                try:
+                    # process.terminate() # SIGTERM
+                    # On Windows, terminate() is kill(). On Linux, it's SIGTERM.
+                    # Since user mentioned "waiting for keyboard input", simple terminate might work.
+                    # If it's really stuck, might need kill().
+                    import signal
+                    process.send_signal(signal.SIGTERM) # Try friendly first
+                    
+                    # Give it a moment? No, api should return fast.
+                    # Worker thread runs process.wait(), which should return once terminated.
+                except Exception as e:
+                    print(f"Error killing job {job_id}: {e}")
+                    
+    return redirect(url_for('job_details', job_id=job_id))
 
 if __name__ == '__main__':
     # Threaded=True is default for Flask, but good to be explicit
