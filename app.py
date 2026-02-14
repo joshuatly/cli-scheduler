@@ -5,6 +5,7 @@ import time
 import threading
 import subprocess
 import queue
+import psutil
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify, abort
 from storage import JsonJobStore, SqliteJobStore
@@ -491,15 +492,33 @@ def cancel_job(job_id):
             process = RUNNING_PROCESSES.get(job_id)
             if process:
                 try:
-                    # process.terminate() # SIGTERM
-                    # On Windows, terminate() is kill(). On Linux, it's SIGTERM.
-                    # Since user mentioned "waiting for keyboard input", simple terminate might work.
-                    # If it's really stuck, might need kill().
-                    import signal
-                    process.send_signal(signal.SIGTERM) # Try friendly first
+                    # Use psutil to kill entire process tree
+                    parent = psutil.Process(process.pid)
+                    children = parent.children(recursive=True)
                     
-                    # Give it a moment? No, api should return fast.
-                    # Worker thread runs process.wait(), which should return once terminated.
+                    # Terminate children first
+                    for child in children:
+                        try:
+                            child.terminate()
+                        except psutil.NoSuchProcess:
+                            pass
+                            
+                    # Terminate parent
+                    try:
+                        parent.terminate()
+                    except psutil.NoSuchProcess:
+                        pass
+                    
+                    # Wait for termination and force kill if needed
+                    gone, alive = psutil.wait_procs(children + [parent], timeout=3)
+                    for p in alive:
+                        try:
+                            p.kill()
+                        except psutil.NoSuchProcess:
+                            pass
+                            
+                except psutil.NoSuchProcess:
+                    pass # Already gone
                 except Exception as e:
                     print(f"Error killing job {job_id}: {e}")
                     
