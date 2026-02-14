@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Preset - CLI Scheduler{% endblock %}
+
+{% block content %}
+<div class="card">
+    <form action="{{ url_for('update_preset') }}" method="POST">
+        <input type="hidden" name="original_name" value="{{ preset.name }}">
+
+        <div class="form-group">
+            <label for="name">Preset Name</label>
+            <input type="text" name="name" id="name" value="{{ preset.name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="command">Command Template</label>
+            <input type="text" name="command" id="command" value="{{ preset.command }}" required>
+            <small style="color: var(--text-secondary)">Use <code>{url}</code> as placeholder.</small>
+        </div>
+        <div class="form-group">
+            <label for="cwd">Working Directory (Optional)</label>
+            <input type="text" name="cwd" id="cwd" value="{{ preset.cwd or '' }}" placeholder="Leave empty for default">
+        </div>
+        <div class="form-group">
+            <label for="description">Description</label>
+            <input type="text" name="description" id="description" value="{{ preset.description }}">
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <a href="{{ url_for('presets_list') }}" class="btn"
+                style="background-color: var(--card-bg); border: 1px solid var(--border);">Cancel</a>
+            <button type="submit" class="btn">Update Preset</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

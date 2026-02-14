@@ -1,0 +1,15 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.log
+logs/
+jobs.json
+.vscode/
+jobs.db
+config.json
+.pytest_cache/
+test_output.txt
+*.spec
+dist/
+build/

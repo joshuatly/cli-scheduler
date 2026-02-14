@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Job Details - CLI Scheduler{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+        <div>
+            <h2 style="margin-top: 0;">{{ job.preset }}</h2>
+            <div style="color: var(--text-secondary); margin-bottom: 0.5rem;">ID: {{ job.id }}</div>
+            <div><span class="status {{ job.status }}">{{ job.status }}</span></div>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="{{ url_for('submit', retry_job_id=job.id) }}" class="btn"
+                style="background-color: var(--warning); color: #000;">Edit</a>
+            <form action="{{ url_for('rerun_job', job_id=job.id) }}" method="POST" style="display: inline;">
+                <button type="submit" class="btn">Rerun</button>
+            </form>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+        <div>
+            <label>Command</label>
+            <code>{{ job.command }}</code>
+        </div>
+        <div>
+            <label>Working Directory</label>
+            <code>{{ job.cwd }}</code>
+        </div>
+        <div>
+            <label>Started</label>
+            <div>{{ job.start_time or '-' }}</div>
+        </div>
+        <div>
+            <label>Finished</label>
+            <div>{{ job.end_time or '-' }}</div>
+        </div>
+        <div>
+            <label>Exit Code</label>
+            <div
+                class="{{ 'text-success' if job.exit_code == 0 else ('text-error' if job.exit_code is not none else 'text-primary') }}">
+                {{ job.exit_code if job.exit_code is not none else '-' }}
+            </div>
+        </div>
+    </div>
+
+    <label>Output Log</label>
+    <pre class="logs" id="log-container">{{ log_content }}</pre>
+</div>
+
+<script>
+    const status = "{{ job.status }}";
+    const jobId = "{{ job.id }}";
+    const logContainer = document.getElementById('log-container');
+
+    function fetchLogs() {
+        fetch(`/api/job/${jobId}/log`)
+            .then(response => response.json())
+            .then(data => {
+                // Only update if content is different to avoid jitter (simple check)
+                if (data.content.length > logContainer.innerText.length) {
+                    logContainer.innerText = data.content;
+                    // Auto scroll to bottom
+                    logContainer.scrollTop = logContainer.scrollHeight;
+                }
+            })
+            .catch(err => console.error("Error fetching logs:", err));
+    }
+
+    // Poll logs if job is running or queued
+    if (status === 'running' || status === 'queued') {
+        setInterval(() => {
+            fetchLogs();
+            // Also could poll status to reload page when done
+            // For now, refreshing page manually or relying on logs update is okay
+        }, 2000);
+    }
+
+    // Initial scroll
+    logContainer.scrollTop = logContainer.scrollHeight;
+</script>
+{% endblock %}

@@ -1,0 +1,20 @@
+{
+    "storage_type": "sqlite",
+    "allowed_ips": [
+        "127.0.0.1",
+        "192.168.*"
+    ],
+    "footer_text": "CLI Scheduler - default footer",
+    "presets": [
+        {
+            "name": "Echo Test",
+            "command": "echo \"{url}\"",
+            "description": "Simple echo for testing"
+        },
+        {
+            "name": "yt-dlp Audio",
+            "command": "yt-dlp -x --audio-format mp3 {url}",
+            "description": "Download audio from YouTube as MP3"
+        }
+    ]
+}

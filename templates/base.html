@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CLI Scheduler{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <h1><a href="{{ url_for('index') }}" style="text-decoration: none; color: inherit;">CLI Scheduler</a>
+                </h1>
+            </div>
+            <div class="nav-links">
+                <a href="{{ url_for('index') }}"
+                    class="{{ 'active' if request.endpoint == 'index' else '' }}">Dashboard</a>
+                <a href="{{ url_for('presets_list') }}"
+                    class="{{ 'active' if request.endpoint == 'presets_list' else '' }}">Presets</a>
+                <a href="{{ url_for('submit') }}" class="btn">+ New Job</a>
+            </div>
+        </header>
+
+        {% block content %}{% endblock %}
+
+        <footer
+            style="margin-top: 2rem; padding: 1rem; text-align: center; color: var(--text-secondary); border-top: 1px solid var(--border);">
+            {{ footer_text }}
+        </footer>
+    </div>
+</body>
+
+</html>
