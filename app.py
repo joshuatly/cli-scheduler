@@ -10,15 +10,20 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify, abort
 from storage import JsonJobStore, SqliteJobStore
 
+from utils import get_app_paths, ensure_directories
+
 app = Flask(__name__)
 
 # --- Configuration & Globals ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
-LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+PATHS = get_app_paths()
+ensure_directories(PATHS)
 
-# Ensure logs directory exists
-os.makedirs(LOGS_DIR, exist_ok=True)
+CONFIG_FILE = str(PATHS['config_file'])
+LOGS_DIR = str(PATHS['logs_dir'])
+
+# Ensure logs directory exists - handled by ensure_directories
+# os.makedirs(LOGS_DIR, exist_ok=True)
 
 # Job Queue for sequential execution
 job_queue = queue.Queue()
@@ -33,24 +38,158 @@ RUNNING_PROCESSES = {}
 def load_config():
     with data_lock:
         if not os.path.exists(CONFIG_FILE):
-            return {"presets": [], "storage_type": "json", "allowed_ips": ["127.0.0.1"]}
+            # Fallback: Check for legacy config in project root
+            legacy_config = os.path.join(BASE_DIR, 'config.json')
+            if os.path.exists(legacy_config):
+                try:
+                    with open(legacy_config, 'r') as f:
+                        print(f" * Loading legacy config from: {legacy_config}")
+                        return json.load(f)
+                except:
+                    pass
+            
+            # Default config allowing local network
+            default_config = {
+                "presets": [
+                    {
+                        "name": "yt-dlp Audio",
+                        "command": "yt-dlp -x --audio-format mp3 \"{url}\"",
+                        "description": "Download audio as MP3 (Default)"
+                    },
+                    {
+                        "name": "Echo Test",
+                        "command": "echo \"{url}\"",
+                        "description": "Simple echo for testing"
+                    }
+                ], 
+                "storage_type": "json", 
+                "allowed_ips": ["127.0.0.1", "192.168.*"]
+            }
+            
+            # Create default config file
+            try:
+                print(f" * Creating default config at: {CONFIG_FILE}")
+                with open(CONFIG_FILE, 'w') as f:
+                    json.dump(default_config, f, indent=4)
+            except Exception as e:
+                print(f" ! Failed to create default config: {e}")
+                
+            return default_config
+
         try:
             with open(CONFIG_FILE, 'r') as f:
+                print(f" * Loading config from: {CONFIG_FILE}")
                 return json.load(f)
         except:
-            return {"presets": [], "storage_type": "json", "allowed_ips": ["127.0.0.1"]}
+             print(f" * Config not found at {CONFIG_FILE}, using defaults")
+             return {
+                "presets": [], 
+                "storage_type": "json", 
+                "allowed_ips": ["127.0.0.1", "192.168.*"]
+            }
+
+def get_version_info():
+    try:
+        # Get the short commit hash
+        commit_hash = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], stderr=subprocess.DEVNULL).decode('utf-8').strip()
+        return f"v-{commit_hash}"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "v-dev"
+
 
 # Initialize Storage
 config = load_config()
 STORAGE_TYPE = config.get('storage_type', 'json')
 ALLOWED_IPS = config.get('allowed_ips', ['127.0.0.1', '192.168.*'])
 
+# Support overrides for paths
+if 'log_dir' in config:
+    LOGS_DIR = os.path.expanduser(config['log_dir'])
+    os.makedirs(LOGS_DIR, exist_ok=True)
+else:
+    LOGS_DIR = str(PATHS['logs_dir'])
+
 if STORAGE_TYPE == 'sqlite':
-    DB_FILE = os.path.join(BASE_DIR, 'jobs.db')
+    if 'db_path' in config:
+        DB_FILE = os.path.expanduser(config['db_path'])
+        # Ensure directory for overridden DB path exists
+        os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+    else:
+        DB_FILE = str(PATHS['db_file'])
     STORAGE = SqliteJobStore(DB_FILE)
 else:
-    JOBS_FILE = os.path.join(BASE_DIR, 'jobs.json')
+    if 'db_path' in config:
+        JOBS_FILE = os.path.expanduser(config['db_path'])
+        # Ensure directory for overridden JSON path exists
+        os.makedirs(os.path.dirname(JOBS_FILE), exist_ok=True)
+    else:
+        # Backward compat or default
+        JOBS_FILE = str(PATHS['jobs_file'])
     STORAGE = JsonJobStore(JOBS_FILE)
+
+print(f" * Logs Directory: {LOGS_DIR}")
+if 'DB_FILE' in locals():
+    print(f" * Database File: {DB_FILE}")
+else:
+    print(f" * Jobs File: {JOBS_FILE}")
+
+
+# --- Template Filters ---
+@app.template_filter('time_ago')
+def time_ago_filter(s):
+    if not s:
+        return ""
+    try:
+        dt = datetime.fromisoformat(s)
+        now = datetime.now()
+        diff = now - dt
+        
+        seconds = diff.total_seconds()
+        if seconds < 60:
+            return "Just now"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            return f"{minutes}m ago"
+        elif seconds < 86400:
+            hours = int(seconds // 3600)
+            return f"{hours}h ago"
+        else:
+            days = int(seconds // 86400)
+            return f"{days}d ago"
+    except Exception:
+        return s
+
+@app.template_filter('duration')
+def duration_filter(start_str, end_str=None):
+    if not start_str:
+        return ""
+    try:
+        if isinstance(start_str, (int, float)):
+             seconds = int(start_str)
+        else:
+            start = datetime.fromisoformat(start_str)
+            if end_str:
+                end = datetime.fromisoformat(end_str)
+            else:
+                end = datetime.now()
+            
+            diff = end - start
+            seconds = int(diff.total_seconds())
+        
+        if seconds < 0: return "0s"
+        
+        if seconds < 60:
+            return f"{seconds}s"
+        elif seconds < 3600:
+            m = seconds // 60
+            s = seconds % 60
+            return f"{m}m {s}s"
+        else:
+            h = seconds // 3600
+            m = (seconds % 3600) // 60
+            return f"{h}h {m}m"
+    except Exception:
+        return ""
 
 # --- Middleware ---
 def is_ip_allowed(client_ip, allowed_list):
@@ -75,7 +214,7 @@ def limit_remote_addr():
 @app.context_processor
 def inject_footer():
     config = load_config()
-    return dict(footer_text=config.get('footer_text', ''))
+    return dict(footer_text=config.get('footer_text', ''), version=get_version_info())
 
 # Helper to save config safely
 def save_config(config):

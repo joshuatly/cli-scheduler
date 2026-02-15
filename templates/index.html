@@ -13,8 +13,8 @@
                 <th>Status</th>
                 <th>Preset</th>
                 <th>Input / Command</th>
-                <th>Created At</th>
-                <th>Started At</th>
+                <th>Timeline</th>
+                <th>Duration</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -29,13 +29,38 @@
                     </div>
                     <small style="color: var(--text-secondary)">{{ job.command }}</small>
                 </td>
-                <td>{{ job.created_at.split('T')[0] }} {{ job.created_at.split('T')[1].split('.')[0] }}</td>
                 <td>
-                    {% if job.start_time %}
-                    {{ job.start_time.split('T')[0] }} {{ job.start_time.split('T')[1].split('.')[0] }}
-                    {% else %}
-                    <span style="color: var(--text-secondary)">-</span>
-                    {% endif %}
+                    <div class="timeline-cell">
+                        <div title="{{ job.created_at }}">
+                            Created: {{ job.created_at | time_ago }}
+                        </div>
+                        {% if job.start_time %}
+                        <small class="text-secondary" title="{{ job.start_time }}">
+                            Started: {{ job.start_time | time_ago }}
+                        </small>
+                        {% endif %}
+                        {% if job.end_time %}
+                        <small class="text-secondary" title="{{ job.end_time }}">
+                            Completed: {{ job.end_time | time_ago }}
+                        </small>
+                        {% endif %}
+                    </div>
+                </td>
+                <td>
+                    <div class="timeline-cell">
+                        {% if job.end_time and job.start_time %}
+                        <div title="Execution time">Ran: {{ job.start_time | duration(job.end_time) }}</div>
+                        {% elif job.start_time and job.status == 'running' %}
+                        <div title="Current runtime">Running: {{ job.start_time | duration }}</div>
+                        {% else %}
+                        <span style="color: var(--text-secondary)">-</span>
+                        {% endif %}
+
+                        {% if job.start_time %}
+                        <small class="text-secondary" title="Time in queue">Queued: {{ job.created_at |
+                            duration(job.start_time) }}</small>
+                        {% endif %}
+                    </div>
                 </td>
                 <td>
                     <a href="{{ url_for('job_details', job_id=job.id) }}">View</a>

@@ -229,3 +229,18 @@ pre.logs {
 .text-secondary {
     color: var(--text-secondary);
 }
+
+/* Timeline Column */
+.timeline-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.timeline-stats {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}

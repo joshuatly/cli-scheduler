@@ -60,28 +60,29 @@
         const customInput = document.getElementById('custom_command');
 
         const cwdInput = document.getElementById('cwd');
-        const defaultCwd = "{{ default_cwd }}".replace(/\\/g, '\\\\'); // Escape backslashes for JS string
+        const defaultCwd = {{ default_cwd | tojson
+    }};
 
-        if (presetSelect.value === 'custom') {
-            customGroup.style.display = 'block';
-            customInput.required = true;
-            // Don't change CWD for custom, leave as is (likely default or user edited)
+    if (presetSelect.value === 'custom') {
+        customGroup.style.display = 'block';
+        customInput.required = true;
+        // Don't change CWD for custom, leave as is (likely default or user edited)
+    } else {
+        customGroup.style.display = 'none';
+        customInput.required = false;
+
+        // Auto-fill CWD from preset if available, else default
+        const selectedOption = presetSelect.options[presetSelect.selectedIndex];
+        const presetCwd = selectedOption.getAttribute('data-cwd');
+        if (presetCwd) {
+            cwdInput.value = presetCwd;
         } else {
-            customGroup.style.display = 'none';
-            customInput.required = false;
-
-            // Auto-fill CWD from preset if available, else default
-            const selectedOption = presetSelect.options[presetSelect.selectedIndex];
-            const presetCwd = selectedOption.getAttribute('data-cwd');
-            if (presetCwd) {
-                cwdInput.value = presetCwd;
-            } else {
-                // If the user hasn't manually changed it from the default, reset it?
-                // Or best logic: if preset has CWD, use it. If not, revert to default home?
-                // Let's stick to: if preset has CWD, set it. If not, set to default home.
-                cwdInput.value = defaultCwd;
-            }
+            // If the user hasn't manually changed it from the default, reset it?
+            // Or best logic: if preset has CWD, use it. If not, revert to default home?
+            // Let's stick to: if preset has CWD, set it. If not, set to default home.
+            cwdInput.value = defaultCwd;
         }
+    }
     }
 
     // Run on load

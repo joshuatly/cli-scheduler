@@ -1,4 +1,6 @@
 {
+    "db_path": "~/.local/cli-scheduler/jobs.db",
+    "log_dir": "~/.local/cli-scheduler/logs",
     "storage_type": "sqlite",
     "allowed_ips": [
         "127.0.0.1",
@@ -13,8 +15,13 @@
         },
         {
             "name": "yt-dlp Audio",
-            "command": "yt-dlp -x --audio-format mp3 {url}",
+            "command": "yt-dlp -x --audio-format mp3 \"{url}\"",
             "description": "Download audio from YouTube as MP3"
+        },
+        {
+            "name": "nslookup hostname",
+            "command": "nslookup \"{url}\"",
+            "description": "nslookup anything"
         }
     ]
 }

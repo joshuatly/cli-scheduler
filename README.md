@@ -82,6 +82,19 @@ Click "Presets" in the navigation bar.
 
 ## Configuration
 
+The application stores configuration and data in standard system locations:
+
+### Windows
+*   **Config**: `%APPDATA%\cli-scheduler\config.json`
+*   **Data**: `%LOCALAPPDATA%\cli-scheduler\`
+*   **Logs**: `%LOCALAPPDATA%\cli-scheduler\logs\`
+
+### Linux / Other
+*   **Config**: `~/.config/cli-scheduler/config.json`
+*   **Data**: `~/.local/cli-scheduler/`
+*   **Logs**: `~/.local/cli-scheduler/logs/`
+
+### Files
 *   `config.json`: Master configuration file.
     *   `storage_type`: Set to `"json"` (default) or `"sqlite"`.
     *   `allowed_ips`: List of allowed IPs or patterns (e.g., `["127.0.0.1", "192.168.*"]`).

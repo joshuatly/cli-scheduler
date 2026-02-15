@@ -35,12 +35,46 @@
             <code>{{ job.cwd }}</code>
         </div>
         <div>
-            <label>Started</label>
-            <div>{{ job.start_time or '-' }}</div>
+            <label>Created</label>
+            <div title="{{ job.created_at }}">
+                {{ job.created_at | time_ago }}
+                <small class="text-secondary">({{ job.created_at }})</small>
+            </div>
         </div>
         <div>
-            <label>Finished</label>
-            <div>{{ job.end_time or '-' }}</div>
+            <label>Timeline</label>
+            <div class="timeline-cell">
+                {% if job.start_time %}
+                <small class="text-secondary" title="{{ job.start_time }}">
+                    Started: {{ job.start_time | time_ago }}
+                </small>
+                {% endif %}
+                {% if job.end_time %}
+                <small class="text-secondary" title="{{ job.end_time }}">
+                    Completed: {{ job.end_time | time_ago }}
+                </small>
+                {% endif %}
+                {% if not job.start_time %}
+                <span class="text-secondary">-</span>
+                {% endif %}
+            </div>
+        </div>
+        <div>
+            <label>Duration Stats</label>
+            <div class="timeline-cell">
+                {% if job.end_time and job.start_time %}
+                <div title="Execution time">Ran: {{ job.start_time | duration(job.end_time) }}</div>
+                {% elif job.start_time and job.status == 'running' %}
+                <div title="Current runtime">Running: {{ job.start_time | duration }}</div>
+                {% else %}
+                <span style="color: var(--text-secondary)">-</span>
+                {% endif %}
+
+                {% if job.start_time %}
+                <small class="text-secondary" title="Time in queue">Queued: {{ job.created_at | duration(job.start_time)
+                    }}</small>
+                {% endif %}
+            </div>
         </div>
         <div>
             <label>Exit Code</label>
