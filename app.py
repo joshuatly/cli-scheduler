@@ -6,6 +6,7 @@ import threading
 import subprocess
 import queue
 import psutil
+import platform
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify, abort
 from storage import JsonJobStore, SqliteJobStore
@@ -281,6 +282,10 @@ def worker():
                     env = os.environ.copy()
                     # Remove VIRTUAL_ENV to prevent tools like uv from using the scheduler's venv
                     env.pop('VIRTUAL_ENV', None)
+                    
+                    # Inject HOSTNAME if not present (common issue in some shells/environments)
+                    if 'HOSTNAME' not in env:
+                        env['HOSTNAME'] = platform.node()
                     
                     process = subprocess.Popen(
                         command, 
