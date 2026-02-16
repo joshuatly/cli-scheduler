@@ -45,14 +45,16 @@
             <label>Timeline</label>
             <div class="timeline-cell">
                 {% if job.start_time %}
-                <small class="text-secondary" title="{{ job.start_time }}">
+                <div title="{{ job.start_time }}">
                     Started: {{ job.start_time | time_ago }}
-                </small>
+                    <small class="text-secondary">({{ job.start_time }})</small>
+                </div>
                 {% endif %}
                 {% if job.end_time %}
-                <small class="text-secondary" title="{{ job.end_time }}">
+                <div title="{{ job.end_time }}" style="margin-top: 0.5rem;">
                     Completed: {{ job.end_time | time_ago }}
-                </small>
+                    <small class="text-secondary">({{ job.end_time }})</small>
+                </div>
                 {% endif %}
                 {% if not job.start_time %}
                 <span class="text-secondary">-</span>
