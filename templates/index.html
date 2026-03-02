@@ -7,7 +7,8 @@
 
 {% block content %}
 <div class="card">
-    <table>
+    <div style="max-width: 100%; overflow-x: auto;">
+        <table>
         <thead>
             <tr>
                 <th>Status</th>
@@ -23,11 +24,11 @@
             <tr>
                 <td><span class="status {{ job.status }}">{{ job.status }}</span></td>
                 <td>{{ job.preset }}</td>
-                <td title="{{ job.command }}">
-                    <div style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <td title="{{ job.command }}" style="max-width: 400px;">
+                    <div style="overflow-wrap: anywhere; word-break: break-word;">
                         {{ job.input_arg }}
                     </div>
-                    <small style="color: var(--text-secondary)">{{ job.command }}</small>
+                    <small style="display: block; margin-top: 4px; color: var(--text-secondary); overflow-wrap: anywhere; word-break: break-word;">{{ job.command }}</small>
                 </td>
                 <td>
                     <div class="timeline-cell">
@@ -69,6 +70,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
 
     <div class="pagination"
         style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
