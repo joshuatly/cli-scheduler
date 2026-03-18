@@ -80,6 +80,61 @@ Click "Presets" in the navigation bar.
 *   **Add**: Create new command templates.
 *   **Edit/Delete**: Manage existing presets.
 
+### 4. URL-Driven Job Submission
+
+The `/submit` route supports query parameters for automation, bookmarks, and external integrations.
+
+#### Form Pre-fill
+
+Open the New Job form with fields pre-populated:
+
+```
+/submit?preset=<preset_name>&urls=<url1>%0A<url2>&cwd=<path>
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `preset` | Name of the preset to select (must match exactly) |
+| `urls` | Input arguments, newline-separated (`%0A` URL-encoded) |
+| `cwd` | Working directory to pre-fill |
+
+**Example:**
+```
+http://localhost:5000/submit?preset=yt-dlp+Audio&urls=https%3A//example.com&cwd=%2Fhome%2Fuser
+```
+
+The form opens pre-filled but the user still reviews and submits manually.
+
+#### Auto-queue (Headless Submission)
+
+Add `autoqueue=1` to bypass the form entirely — jobs are created and queued immediately, then the browser redirects to the dashboard.
+
+```
+/submit?autoqueue=1&preset=<preset_name>&urls=<url1>%0A<url2>&cwd=<path>
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `autoqueue` | Yes | Must be `1` to trigger auto-queue |
+| `preset` | Yes | Name of an existing preset |
+| `urls` | No | Newline-separated input args; one job created per line |
+| `cwd` | No | Working directory; defaults to home directory |
+
+**Example:**
+```
+http://localhost:5000/submit?autoqueue=1&preset=yt-dlp+Audio&urls=https%3A//example.com
+```
+
+If `urls` contains multiple lines, one job is queued per line. If `urls` is omitted and the preset command contains no `{url}` placeholder, a single job is queued with no input argument.
+
+#### Retry / Edit a Past Job
+
+From any job detail page, click **Edit** to open the New Job form pre-filled with that job's original preset, working directory, and input arguments:
+
+```
+/submit?retry_job_id=<job_id>
+```
+
 ## Configuration
 
 The application stores configuration and data in standard system locations:

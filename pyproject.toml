@@ -1,0 +1,16 @@
+[project]
+name = "cli-scheduler"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "flask",
+    "psutil",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+cli-scheduler = "app:app"
