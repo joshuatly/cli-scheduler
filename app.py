@@ -454,6 +454,38 @@ def submit():
         # save_jobs(jobs) # Not needed as we added individually
         return redirect(url_for('index'))
         
+    # GET request - check for autoqueue
+    if request.args.get('autoqueue') == '1':
+        preset_name = request.args.get('preset')
+        cwd = request.args.get('cwd', os.path.expanduser("~"))
+        raw_urls = request.args.get('urls', '')
+
+        preset_cmd = next((p['command'] for p in config['presets'] if p['name'] == preset_name), None)
+        if not preset_cmd:
+            return "Invalid Preset", 400
+
+        urls = [line.strip() for line in raw_urls.splitlines() if line.strip()]
+        if not urls and "{url}" not in preset_cmd:
+            urls = [""]
+
+        for url in urls:
+            job_id = str(uuid.uuid4())
+            full_command = preset_cmd.replace("{url}", url) if "{url}" in preset_cmd else preset_cmd
+            job = {
+                "id": job_id,
+                "command": full_command,
+                "preset": preset_name,
+                "input_arg": url,
+                "status": "queued",
+                "created_at": datetime.now().isoformat(),
+                "cwd": cwd,
+                "log_file": f"{job_id}.log"
+            }
+            STORAGE.add_job(job)
+            job_queue.put(job_id)
+
+        return redirect(url_for('index'))
+
     # GET request - check for pre-fill
     job_id = request.args.get('retry_job_id')
     default_values = {
@@ -462,27 +494,28 @@ def submit():
         "urls": "",
         "custom_command": ""
     }
-    
+
     if job_id:
         job = get_job(job_id)
         if job:
             if job.get('preset') == 'Custom Command':
                 default_values["preset"] = 'custom'
-                # For custom commands, we need to try and reverse engineer the template/command?
-                # Or just put the full command in the custom box and leave inputs empty?
-                # Simpler: just put the full executed command as the custom template and leave URL empty.
                 default_values["custom_command"] = job.get('command')
-                # If we had separate input_arg, we could try to put it back, but 
-                # for simplicity in generic case, if it was custom, we just let them edit the full command string.
-                default_values["custom_command"] = job.get('command')
-                # If we had separate input_arg, we could try to put it back, but 
-                # for simplicity in generic case, if it was custom, we just let them edit the full command string.
             else:
                 default_values["preset"] = job.get('preset', '')
-            
+
             default_values["cwd"] = job.get('cwd', os.path.expanduser("~"))
             default_values["urls"] = job.get('input_arg', '')
-            
+    else:
+        preset = request.args.get('preset', '')
+        cwd = request.args.get('cwd', os.path.expanduser("~"))
+        urls = request.args.get('urls', '')
+
+        if preset:
+            default_values["preset"] = preset
+        default_values["cwd"] = cwd
+        default_values["urls"] = urls
+
     return render_template('submit.html', presets=config['presets'], default_values=default_values, default_cwd=os.path.expanduser("~"))
 
 @app.route('/presets', methods=['GET'])
@@ -671,4 +704,5 @@ def cancel_job(job_id):
 if __name__ == '__main__':
     # Threaded=True is default for Flask, but good to be explicit
     # app.run(debug=True, port=5000)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
