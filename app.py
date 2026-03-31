@@ -832,21 +832,17 @@ def api_submit_jobs():
         required: true
         schema:
           type: object
+          required:
+            - preset
           properties:
             preset:
               type: string
-              description: Preset name, or "custom"
+              description: Preset name (must match a preset defined in config)
             urls:
               type: array
               items:
                 type: string
               description: List of input arguments substituted for {url}
-            cwd:
-              type: string
-              description: Working directory for the job
-            custom_command:
-              type: string
-              description: Required when preset is "custom"
     responses:
       201:
         description: Jobs created
@@ -867,19 +863,16 @@ def api_submit_jobs():
 
     preset_name = data.get('preset')
     urls = data.get('urls', [])
-    cwd = data.get('cwd', os.path.expanduser("~"))
 
     if not preset_name:
         return jsonify({"error": "Missing 'preset' field"}), 400
 
-    if preset_name == 'custom':
-        preset_cmd = data.get('custom_command')
-        if not preset_cmd:
-            return jsonify({"error": "Missing 'custom_command' for custom preset"}), 400
-    else:
-        preset_cmd = next((p['command'] for p in cfg['presets'] if p['name'] == preset_name), None)
-        if not preset_cmd:
-            return jsonify({"error": f"Preset '{preset_name}' not found"}), 400
+    matched_preset = next((p for p in cfg['presets'] if p['name'] == preset_name), None)
+    if not matched_preset:
+        return jsonify({"error": f"Preset '{preset_name}' not found"}), 400
+
+    preset_cmd = matched_preset['command']
+    cwd = matched_preset.get('cwd') or os.path.expanduser("~")
 
     if not urls and "{url}" not in preset_cmd:
         urls = [""]
@@ -894,7 +887,7 @@ def api_submit_jobs():
         job = {
             "id": job_id,
             "command": full_command,
-            "preset": preset_name if preset_name != 'custom' else 'Custom Command',
+            "preset": preset_name,
             "input_arg": url,
             "status": "queued",
             "created_at": datetime.now().isoformat(),
