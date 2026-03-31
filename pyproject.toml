@@ -5,6 +5,7 @@ requires-python = ">=3.9"
 dependencies = [
     "flask",
     "psutil",
+    "flasgger",
 ]
 
 [project.optional-dependencies]
