@@ -9,11 +9,75 @@ import psutil
 import platform
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify, abort
+from flasgger import Swagger
 from storage import JsonJobStore, SqliteJobStore
 
 from utils import get_app_paths, ensure_directories
 
 app = Flask(__name__)
+
+swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "CLI Scheduler API",
+        "description": "REST API for submitting and managing CLI jobs",
+        "version": "1.0.0",
+    },
+    "basePath": "/",
+    "schemes": ["http"],
+    "consumes": ["application/json"],
+    "produces": ["application/json"],
+    "definitions": {
+        "Job": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "command": {"type": "string"},
+                "preset": {"type": "string"},
+                "input_arg": {"type": "string"},
+                "status": {"type": "string", "enum": ["queued", "running", "finished", "failed", "cancelled"]},
+                "created_at": {"type": "string", "format": "date-time"},
+                "start_time": {"type": "string", "format": "date-time"},
+                "end_time": {"type": "string", "format": "date-time"},
+                "exit_code": {"type": "integer"},
+                "cwd": {"type": "string"},
+                "log_file": {"type": "string"},
+            }
+        },
+        "Preset": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "command": {"type": "string"},
+                "description": {"type": "string"},
+                "cwd": {"type": "string"},
+            }
+        },
+        "Error": {
+            "type": "object",
+            "properties": {
+                "error": {"type": "string"}
+            }
+        }
+    }
+}
+
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": "apispec_1",
+            "route": "/apispec_1.json",
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda tag: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/api/docs",
+}
+
+swagger = Swagger(app, template=swagger_template, config=swagger_config)
 
 # --- Configuration & Globals ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -217,15 +281,6 @@ def inject_footer():
     config = load_config()
     return dict(footer_text=config.get('footer_text', ''), version=get_version_info())
 
-# Helper to save config safely
-def save_config(config):
-    with data_lock:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=4)
-
-
-
-            
 # Helper to save config safely
 def save_config(config):
     with data_lock:
@@ -700,6 +755,499 @@ def cancel_job(job_id):
                     print(f"Error killing job {job_id}: {e}")
                     
     return redirect(url_for('job_details', job_id=job_id))
+
+# --- REST API Routes ---
+
+@app.route('/api/jobs', methods=['GET'])
+def api_list_jobs():
+    """List all jobs with optional filtering and pagination.
+    ---
+    tags:
+      - Jobs
+    parameters:
+      - name: page
+        in: query
+        type: integer
+        default: 1
+      - name: per_page
+        in: query
+        type: integer
+        default: 20
+      - name: status
+        in: query
+        type: string
+        enum: [queued, running, finished, failed, cancelled]
+    responses:
+      200:
+        description: Paginated job list
+        schema:
+          type: object
+          properties:
+            jobs:
+              type: array
+              items:
+                $ref: '#/definitions/Job'
+            page:
+              type: integer
+            per_page:
+              type: integer
+            total:
+              type: integer
+            total_pages:
+              type: integer
+    """
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    status_filter = request.args.get('status')
+
+    jobs = STORAGE.get_all_jobs()
+    jobs.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+
+    if status_filter:
+        jobs = [j for j in jobs if j.get('status') == status_filter]
+
+    total = len(jobs)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    start = (page - 1) * per_page
+    page_jobs = jobs[start:start + per_page]
+
+    return jsonify({
+        "jobs": page_jobs,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+    })
+
+
+@app.route('/api/jobs', methods=['POST'])
+def api_submit_jobs():
+    """Submit one or more jobs.
+    ---
+    tags:
+      - Jobs
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            preset:
+              type: string
+              description: Preset name, or "custom"
+            urls:
+              type: array
+              items:
+                type: string
+              description: List of input arguments substituted for {url}
+            cwd:
+              type: string
+              description: Working directory for the job
+            custom_command:
+              type: string
+              description: Required when preset is "custom"
+    responses:
+      201:
+        description: Jobs created
+        schema:
+          type: object
+          properties:
+            jobs:
+              type: array
+              items:
+                $ref: '#/definitions/Job'
+      400:
+        description: Bad request
+        schema:
+          $ref: '#/definitions/Error'
+    """
+    data = request.get_json(silent=True) or {}
+    cfg = load_config()
+
+    preset_name = data.get('preset')
+    urls = data.get('urls', [])
+    cwd = data.get('cwd', os.path.expanduser("~"))
+
+    if not preset_name:
+        return jsonify({"error": "Missing 'preset' field"}), 400
+
+    if preset_name == 'custom':
+        preset_cmd = data.get('custom_command')
+        if not preset_cmd:
+            return jsonify({"error": "Missing 'custom_command' for custom preset"}), 400
+    else:
+        preset_cmd = next((p['command'] for p in cfg['presets'] if p['name'] == preset_name), None)
+        if not preset_cmd:
+            return jsonify({"error": f"Preset '{preset_name}' not found"}), 400
+
+    if not urls and "{url}" not in preset_cmd:
+        urls = [""]
+
+    if not urls:
+        return jsonify({"error": "No URLs provided for a preset that requires {url}"}), 400
+
+    new_jobs = []
+    for url in urls:
+        job_id = str(uuid.uuid4())
+        full_command = preset_cmd.replace("{url}", url) if "{url}" in preset_cmd else preset_cmd
+        job = {
+            "id": job_id,
+            "command": full_command,
+            "preset": preset_name if preset_name != 'custom' else 'Custom Command',
+            "input_arg": url,
+            "status": "queued",
+            "created_at": datetime.now().isoformat(),
+            "cwd": cwd,
+            "log_file": f"{job_id}.log",
+        }
+        new_jobs.append(job)
+        STORAGE.add_job(job)
+        job_queue.put(job_id)
+
+    return jsonify({"jobs": new_jobs}), 201
+
+
+@app.route('/api/jobs/<job_id>', methods=['GET'])
+def api_get_job(job_id):
+    """Get a single job by ID.
+    ---
+    tags:
+      - Jobs
+    parameters:
+      - name: job_id
+        in: path
+        type: string
+        required: true
+    responses:
+      200:
+        description: Job details
+        schema:
+          $ref: '#/definitions/Job'
+      404:
+        description: Job not found
+        schema:
+          $ref: '#/definitions/Error'
+    """
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify(job)
+
+
+@app.route('/api/jobs/<job_id>/cancel', methods=['POST'])
+def api_cancel_job(job_id):
+    """Cancel a queued or running job.
+    ---
+    tags:
+      - Jobs
+    parameters:
+      - name: job_id
+        in: path
+        type: string
+        required: true
+    responses:
+      200:
+        description: Job cancelled
+        schema:
+          $ref: '#/definitions/Job'
+      400:
+        description: Job already finished
+        schema:
+          $ref: '#/definitions/Error'
+      404:
+        description: Job not found
+        schema:
+          $ref: '#/definitions/Error'
+    """
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    status = job.get('status')
+    if status in ['finished', 'failed', 'cancelled']:
+        return jsonify({"error": "Job already finished"}), 400
+
+    update_job_status(job_id, 'cancelled')
+
+    if status == 'running':
+        with process_lock:
+            process = RUNNING_PROCESSES.get(job_id)
+            if process:
+                try:
+                    parent = psutil.Process(process.pid)
+                    children = parent.children(recursive=True)
+                    for child in children:
+                        try:
+                            child.terminate()
+                        except psutil.NoSuchProcess:
+                            pass
+                    try:
+                        parent.terminate()
+                    except psutil.NoSuchProcess:
+                        pass
+                    gone, alive = psutil.wait_procs(children + [parent], timeout=3)
+                    for p in alive:
+                        try:
+                            p.kill()
+                        except psutil.NoSuchProcess:
+                            pass
+                except psutil.NoSuchProcess:
+                    pass
+                except Exception as e:
+                    print(f"Error killing job {job_id}: {e}")
+
+    return jsonify(get_job(job_id))
+
+
+@app.route('/api/jobs/<job_id>/rerun', methods=['POST'])
+def api_rerun_job(job_id):
+    """Rerun a job by creating a new copy of it.
+    ---
+    tags:
+      - Jobs
+    parameters:
+      - name: job_id
+        in: path
+        type: string
+        required: true
+    responses:
+      201:
+        description: New job created
+        schema:
+          $ref: '#/definitions/Job'
+      404:
+        description: Original job not found
+        schema:
+          $ref: '#/definitions/Error'
+    """
+    original_job = get_job(job_id)
+    if not original_job:
+        return jsonify({"error": "Job not found"}), 404
+
+    new_job_id = str(uuid.uuid4())
+    new_job = original_job.copy()
+    new_job['id'] = new_job_id
+    new_job['status'] = "queued"
+    new_job['created_at'] = datetime.now().isoformat()
+    new_job['start_time'] = None
+    new_job['end_time'] = None
+    new_job['exit_code'] = None
+    new_job['log_file'] = f"{new_job_id}.log"
+
+    STORAGE.add_job(new_job)
+    job_queue.put(new_job_id)
+
+    return jsonify(new_job), 201
+
+
+@app.route('/api/jobs/<job_id>/log', methods=['GET'])
+def api_job_log(job_id):
+    """Get the log output for a job.
+    ---
+    tags:
+      - Jobs
+    parameters:
+      - name: job_id
+        in: path
+        type: string
+        required: true
+    responses:
+      200:
+        description: Job log content
+        schema:
+          type: object
+          properties:
+            content:
+              type: string
+      404:
+        description: Job not found
+        schema:
+          $ref: '#/definitions/Error'
+    """
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    log_path = os.path.join(LOGS_DIR, job['log_file'])
+    if os.path.exists(log_path):
+        with open(log_path, 'r') as f:
+            return jsonify({"content": f.read()})
+    return jsonify({"content": ""})
+
+
+@app.route('/api/presets', methods=['GET'])
+def api_list_presets():
+    """List all presets.
+    ---
+    tags:
+      - Presets
+    responses:
+      200:
+        description: List of presets
+        schema:
+          type: object
+          properties:
+            presets:
+              type: array
+              items:
+                $ref: '#/definitions/Preset'
+    """
+    cfg = load_config()
+    return jsonify({"presets": cfg['presets']})
+
+
+@app.route('/api/presets', methods=['POST'])
+def api_create_preset():
+    """Create a new preset.
+    ---
+    tags:
+      - Presets
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [name, command]
+          properties:
+            name:
+              type: string
+            command:
+              type: string
+            description:
+              type: string
+            cwd:
+              type: string
+    responses:
+      201:
+        description: Preset created
+        schema:
+          $ref: '#/definitions/Preset'
+      400:
+        description: Bad request
+        schema:
+          $ref: '#/definitions/Error'
+    """
+    data = request.get_json(silent=True) or {}
+    name = data.get('name', '').strip()
+    command = data.get('command', '').strip()
+
+    if not name or not command:
+        return jsonify({"error": "Missing required fields: name, command"}), 400
+
+    cfg = load_config()
+    if any(p['name'] == name for p in cfg['presets']):
+        return jsonify({"error": f"Preset '{name}' already exists"}), 400
+
+    preset = {
+        "name": name,
+        "command": command,
+        "description": data.get('description', ''),
+        "cwd": data.get('cwd', ''),
+    }
+    cfg['presets'].append(preset)
+    save_config(cfg)
+
+    return jsonify(preset), 201
+
+
+@app.route('/api/presets/<name>', methods=['PUT'])
+def api_update_preset(name):
+    """Update an existing preset.
+    ---
+    tags:
+      - Presets
+    parameters:
+      - name: name
+        in: path
+        type: string
+        required: true
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+            command:
+              type: string
+            description:
+              type: string
+            cwd:
+              type: string
+    responses:
+      200:
+        description: Preset updated
+        schema:
+          $ref: '#/definitions/Preset'
+      400:
+        description: Bad request
+        schema:
+          $ref: '#/definitions/Error'
+      404:
+        description: Preset not found
+        schema:
+          $ref: '#/definitions/Error'
+    """
+    data = request.get_json(silent=True) or {}
+    cfg = load_config()
+
+    preset = next((p for p in cfg['presets'] if p['name'] == name), None)
+    if not preset:
+        return jsonify({"error": f"Preset '{name}' not found"}), 404
+
+    new_name = data.get('name', name).strip()
+    if new_name != name and any(p['name'] == new_name for p in cfg['presets']):
+        return jsonify({"error": f"Preset '{new_name}' already exists"}), 400
+
+    preset['name'] = new_name
+    if 'command' in data:
+        preset['command'] = data['command']
+    if 'description' in data:
+        preset['description'] = data['description']
+    if 'cwd' in data:
+        preset['cwd'] = data['cwd']
+
+    save_config(cfg)
+    return jsonify(preset)
+
+
+@app.route('/api/presets/<name>', methods=['DELETE'])
+def api_delete_preset(name):
+    """Delete a preset.
+    ---
+    tags:
+      - Presets
+    parameters:
+      - name: name
+        in: path
+        type: string
+        required: true
+    responses:
+      200:
+        description: Preset deleted
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+      404:
+        description: Preset not found
+        schema:
+          $ref: '#/definitions/Error'
+    """
+    cfg = load_config()
+    original_count = len(cfg['presets'])
+    cfg['presets'] = [p for p in cfg['presets'] if p['name'] != name]
+
+    if len(cfg['presets']) == original_count:
+        return jsonify({"error": f"Preset '{name}' not found"}), 404
+
+    save_config(cfg)
+    return jsonify({"message": f"Preset '{name}' deleted"})
+
 
 if __name__ == '__main__':
     # Threaded=True is default for Flask, but good to be explicit
