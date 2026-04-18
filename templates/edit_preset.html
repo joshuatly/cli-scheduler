@@ -4,7 +4,8 @@
 
 {% block content %}
 <div class="card">
-    <form action="{{ url_for('update_preset') }}" method="POST">
+    <h3 style="margin-top: 0;">Edit Preset</h3>
+    <form action="{{ url_for('views.update_preset') }}" method="POST">
         <input type="hidden" name="original_name" value="{{ preset.name }}">
 
         <div class="form-group">
@@ -14,7 +15,7 @@
         <div class="form-group">
             <label for="command">Command Template</label>
             <input type="text" name="command" id="command" value="{{ preset.command }}" required>
-            <small style="color: var(--text-secondary)">Use <code>{url}</code> as placeholder.</small>
+            <small class="hint">Use <code>{url}</code> as placeholder.</small>
         </div>
         <div class="form-group">
             <label for="cwd">Working Directory (Optional)</label>
@@ -25,9 +26,8 @@
             <input type="text" name="description" id="description" value="{{ preset.description }}">
         </div>
 
-        <div style="display: flex; gap: 1rem;">
-            <a href="{{ url_for('presets_list') }}" class="btn"
-                style="background-color: var(--card-bg); border: 1px solid var(--border);">Cancel</a>
+        <div class="actions">
+            <a href="{{ url_for('views.presets_list') }}" class="btn btn-ghost">Cancel</a>
             <button type="submit" class="btn">Update Preset</button>
         </div>
     </form>
