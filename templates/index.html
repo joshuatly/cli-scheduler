@@ -1,109 +1,53 @@
 {% extends "base.html" %}
 
-{% block head %}
-<!-- Auto-refresh every 5 seconds to show updated status -->
-<meta http-equiv="refresh" content="5">
-{% endblock %}
+{% block title %}Dashboard - CLI Scheduler{% endblock %}
 
 {% block content %}
 <div class="card">
-    <div style="max-width: 100%; overflow-x: auto;">
+    <div class="toolbar">
+        <label for="status-filter" style="margin: 0;">Filter:</label>
+        <select id="status-filter" aria-label="Filter jobs by status">
+            <option value="">All statuses</option>
+            <option value="queued">Queued</option>
+            <option value="running">Running</option>
+            <option value="finished">Finished</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+        </select>
+
+        <button type="button" class="btn btn-ghost" id="refresh-now" title="Refresh now">↻ Refresh</button>
+
+        <span class="live-indicator" id="live-indicator">
+            <span class="dot"></span>
+            <span class="label">Live</span>
+            <span id="jobs-meta" class="text-muted" style="margin-left: 0.5rem;"></span>
+        </span>
+    </div>
+
+    <div class="table-wrap">
         <table>
-        <thead>
-            <tr>
-                <th>Status</th>
-                <th>Preset</th>
-                <th>Input / Command</th>
-                <th>Timeline</th>
-                <th>Duration</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for job in jobs %}
-            <tr>
-                <td><span class="status {{ job.status }}">{{ job.status }}</span></td>
-                <td>{{ job.preset }}</td>
-                <td title="{{ job.command }}" style="max-width: 400px;">
-                    <div style="overflow-wrap: anywhere; word-break: break-word;">
-                        {{ job.input_arg }}
-                    </div>
-                    <small style="display: block; margin-top: 4px; color: var(--text-secondary); overflow-wrap: anywhere; word-break: break-word;">{{ job.command }}</small>
-                </td>
-                <td>
-                    <div class="timeline-cell">
-                        <div title="{{ job.created_at }}">
-                            Created: {{ job.created_at | time_ago }}
-                        </div>
-                        {% if job.start_time %}
-                        <small class="text-secondary" title="{{ job.start_time }}">
-                            Started: {{ job.start_time | time_ago }}
-                        </small>
-                        {% endif %}
-                        {% if job.end_time %}
-                        <small class="text-secondary" title="{{ job.end_time }}">
-                            Completed: {{ job.end_time | time_ago }}
-                        </small>
-                        {% endif %}
-                    </div>
-                </td>
-                <td>
-                    <div class="timeline-cell">
-                        {% if job.end_time and job.start_time %}
-                        <div title="Execution time">Ran: {{ job.start_time | duration(job.end_time) }}</div>
-                        {% elif job.start_time and job.status == 'running' %}
-                        <div title="Current runtime">Running: {{ job.start_time | duration }}</div>
-                        {% else %}
-                        <span style="color: var(--text-secondary)">-</span>
-                        {% endif %}
-
-                        {% if job.start_time %}
-                        <small class="text-secondary" title="Time in queue">Queued: {{ job.created_at |
-                            duration(job.start_time) }}</small>
-                        {% endif %}
-                    </div>
-                </td>
-                <td>
-                    <a href="{{ url_for('job_details', job_id=job.id) }}">View</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Preset</th>
+                    <th>Input / Command</th>
+                    <th>Timeline</th>
+                    <th>Duration</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="jobs-tbody"></tbody>
+        </table>
     </div>
 
-    <div class="pagination"
-        style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-        {% if page > 1 %}
-        <a href="{{ url_for('index', page=page-1) }}" class="btn" style="padding: 0.5rem 1rem;">&laquo; Prev</a>
-        {% else %}
-        <span class="btn" style="padding: 0.5rem 1rem; opacity: 0.5; cursor: default;">&laquo; Prev</span>
-        {% endif %}
-
-        {% for p in page_numbers %}
-        {% if p is none %}
-        <span style="color: var(--text-secondary); padding: 0 0.5rem;">...</span>
-        {% elif p == page %}
-        <span class="btn"
-            style="padding: 0.5rem 1rem; background-color: var(--primary); border-color: var(--primary);">{{ p
-            }}</span>
-        {% else %}
-        <a href="{{ url_for('index', page=p) }}" class="btn"
-            style="padding: 0.5rem 1rem; background-color: var(--card-bg); border-color: var(--border);">{{ p
-            }}</a>
-        {% endif %}
-        {% endfor %}
-
-        {% if page < total_pages %} <a href="{{ url_for('index', page=page+1) }}" class="btn"
-            style="padding: 0.5rem 1rem;">Next &raquo;</a>
-            {% else %}
-            <span class="btn" style="padding: 0.5rem 1rem; opacity: 0.5; cursor: default;">Next &raquo;</span>
-            {% endif %}
-    </div>
-    {% if not jobs %}
-    <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+    <div id="empty-state" class="empty-state" hidden>
         No jobs found. Start by creating one!
     </div>
-    {% endif %}
+
+    <div class="pagination" id="pagination"></div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

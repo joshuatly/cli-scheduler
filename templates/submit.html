@@ -2,31 +2,31 @@
 
 {% block title %}New Job - CLI Scheduler{% endblock %}
 
+{% block body_attrs %} data-default-cwd="{{ default_cwd }}"{% endblock %}
+
 {% block content %}
 <div class="card" style="max-width: 800px; margin: 0 auto;">
-    <form action="{{ url_for('submit') }}" method="POST">
-
+    <form action="{{ url_for('views.submit') }}" method="POST">
         <div class="form-group">
             <label for="preset">Command Preset</label>
-            <select name="preset" id="preset" required onchange="toggleCustomCommand()">
+            <select name="preset" id="preset" required>
                 {% for preset in presets %}
-                <option value="{{ preset.name }}" data-cwd="{{ preset.cwd }}" {% if preset.name==default_values.preset
-                    %}selected{% endif %}>{{
-                    preset.name }} - {{ preset.description }}</option>
+                <option value="{{ preset.name }}" data-cwd="{{ preset.cwd }}"
+                    {% if preset.name == default_values.preset %}selected{% endif %}>
+                    {{ preset.name }} - {{ preset.description }}
+                </option>
                 {% endfor %}
-                <option value="custom" {% if default_values.preset=='custom' %}selected{% endif %}>Custom
-                    Command...</option>
+                <option value="custom" {% if default_values.preset == 'custom' %}selected{% endif %}>Custom Command...</option>
             </select>
-            <div style="margin-top: 5px;">
-                <small><a href="{{ url_for('presets_list') }}">Manage Presets</a></small>
-            </div>
+            <small class="hint"><a href="{{ url_for('views.presets_list') }}">Manage Presets</a></small>
         </div>
 
         <div class="form-group" id="custom-command-group" style="display: none;">
             <label for="custom_command">Custom Command Template</label>
-            <input type="text" name="custom_command" id="custom_command" placeholder="e.g. ping {url} OR just 'ls -la'"
+            <input type="text" name="custom_command" id="custom_command"
+                placeholder="e.g. ping {url} OR just 'ls -la'"
                 value="{{ default_values.custom_command }}">
-            <small style="color: var(--text-secondary)">
+            <small class="hint">
                 Enter the full command. Use <code>{url}</code> placeholder if you want to iterate over the input
                 arguments below.
             </small>
@@ -38,54 +38,22 @@
         </div>
 
         <div class="form-group">
-            <label for="urls">Input Arguments (One per line)</label>
+            <label for="urls">Input Arguments (one per line)</label>
             <textarea name="urls" id="urls" rows="10"
                 placeholder="https://example.com/video1&#10;https://example.com/video2">{{ default_values.urls }}</textarea>
-            <small style="color: var(--text-secondary)">
+            <small class="hint">
                 Each line will create a separate job. Optional if your command doesn't use <code>{url}</code>.
             </small>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 1rem;">
-            <a href="{{ url_for('index') }}" style="padding: 0.5rem 1rem;">Cancel</a>
+        <div class="actions" style="justify-content: flex-end;">
+            <a href="{{ url_for('views.index') }}" class="btn btn-ghost">Cancel</a>
             <button type="submit" class="btn">Queue Jobs</button>
         </div>
     </form>
 </div>
+{% endblock %}
 
-<script>
-    function toggleCustomCommand() {
-        const presetSelect = document.getElementById('preset');
-        const customGroup = document.getElementById('custom-command-group');
-        const customInput = document.getElementById('custom_command');
-
-        const cwdInput = document.getElementById('cwd');
-        const defaultCwd = {{ default_cwd | tojson
-    }};
-
-    if (presetSelect.value === 'custom') {
-        customGroup.style.display = 'block';
-        customInput.required = true;
-        // Don't change CWD for custom, leave as is (likely default or user edited)
-    } else {
-        customGroup.style.display = 'none';
-        customInput.required = false;
-
-        // Auto-fill CWD from preset if available, else default
-        const selectedOption = presetSelect.options[presetSelect.selectedIndex];
-        const presetCwd = selectedOption.getAttribute('data-cwd');
-        if (presetCwd) {
-            cwdInput.value = presetCwd;
-        } else {
-            // If the user hasn't manually changed it from the default, reset it?
-            // Or best logic: if preset has CWD, use it. If not, revert to default home?
-            // Let's stick to: if preset has CWD, set it. If not, set to default home.
-            cwdInput.value = defaultCwd;
-        }
-    }
-    }
-
-    // Run on load
-    toggleCustomCommand();
-</script>
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/submit.js') }}"></script>
 {% endblock %}
