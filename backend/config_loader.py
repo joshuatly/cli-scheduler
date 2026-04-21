@@ -18,6 +18,8 @@ DEFAULT_CONFIG = {
     ],
     "storage_type": "json",
     "allowed_ips": ["127.0.0.1", "192.168.*"],
+    "retention_max_jobs": None,
+    "retention_max_age_days": None,
 }
 
 _lock = threading.Lock()

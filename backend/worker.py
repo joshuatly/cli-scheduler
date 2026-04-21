@@ -4,7 +4,7 @@ import queue
 import subprocess
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import psutil
 
@@ -138,3 +138,72 @@ class JobRunner:
         finally:
             with self._process_lock:
                 self._running.pop(job_id, None)
+
+
+class RetentionSweeper:
+    """Background thread that periodically prunes old job records and their log files.
+
+    Only terminal jobs (finished/failed/cancelled) are eligible for deletion.
+    Reads config on each sweep so changes take effect without restart.
+    """
+
+    def __init__(self, ctx, interval_seconds=3600):
+        self.ctx = ctx
+        self.interval = interval_seconds
+        self._thread = None
+
+    def start(self):
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        while True:
+            time.sleep(self.interval)
+            try:
+                self._sweep()
+            except Exception as e:
+                print(f"Retention sweep error: {e}")
+
+    def _sweep(self):
+        config = self.ctx.load_config()
+        max_jobs = config.get("retention_max_jobs")
+        max_age_days = config.get("retention_max_age_days")
+
+        if not max_jobs and not max_age_days:
+            return
+
+        all_jobs = self.ctx.storage.get_all_jobs()
+        terminal = [j for j in all_jobs
+                    if j["status"] in ("finished", "failed", "cancelled")]
+
+        to_delete = set()
+
+        if max_age_days:
+            cutoff = datetime.now() - timedelta(days=max_age_days)
+            for job in terminal:
+                try:
+                    if datetime.fromisoformat(job["created_at"]) < cutoff:
+                        to_delete.add(job["id"])
+                except (ValueError, TypeError):
+                    pass
+
+        if max_jobs:
+            remaining = [j for j in terminal if j["id"] not in to_delete]
+            remaining.sort(key=lambda j: j.get("created_at", ""), reverse=True)
+            if len(remaining) > max_jobs:
+                to_delete.update(j["id"] for j in remaining[max_jobs:])
+
+        if not to_delete:
+            return
+
+        for job in terminal:
+            if job["id"] in to_delete and job.get("log_file"):
+                try:
+                    os.remove(os.path.join(self.ctx.logs_dir, job["log_file"]))
+                except FileNotFoundError:
+                    pass
+
+        self.ctx.storage.delete_jobs(list(to_delete))
+        print(f"Retention sweep: deleted {len(to_delete)} jobs")
