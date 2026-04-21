@@ -5,34 +5,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CLI Scheduler{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block head %}{% endblock %}
 </head>
 
-<body>
+<body{% block body_attrs %}{% endblock %}>
     <div class="container">
         <header>
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <h1><a href="{{ url_for('index') }}" style="text-decoration: none; color: inherit;">CLI Scheduler</a>
-                </h1>
-            </div>
-            <div class="nav-links">
-                <a href="{{ url_for('index') }}"
-                    class="{{ 'active' if request.endpoint == 'index' else '' }}">Dashboard</a>
-                <a href="{{ url_for('presets_list') }}"
-                    class="{{ 'active' if request.endpoint == 'presets_list' else '' }}">Presets</a>
-                <a href="{{ url_for('submit') }}" class="btn">+ New Job</a>
-            </div>
+            <h1><a href="{{ url_for('views.index') }}">CLI Scheduler</a></h1>
+            <nav class="nav-links">
+                <a href="{{ url_for('views.index') }}"
+                    class="{{ 'active' if request.endpoint == 'views.index' else '' }}">Dashboard</a>
+                <a href="{{ url_for('views.presets_list') }}"
+                    class="{{ 'active' if request.endpoint == 'views.presets_list' else '' }}">Presets</a>
+                <a href="{{ url_for('views.submit') }}" class="btn">+ New Job</a>
+            </nav>
         </header>
 
-        {% block content %}{% endblock %}
+        <main>
+            {% block content %}{% endblock %}
+        </main>
 
-        <footer
-            style="margin-top: 2rem; padding: 1rem; text-align: center; color: var(--text-secondary); border-top: 1px solid var(--border);">
-            {{ footer_text }} <span style="font-size: 0.8em; color: var(--text-muted); margin-left: 10px;">{{ version
-                }}</span>
+        <footer class="site-footer">
+            {{ footer_text }}
+            <span class="version">{{ version }}</span>
         </footer>
     </div>
+    {% block scripts %}{% endblock %}
 </body>
 
 </html>

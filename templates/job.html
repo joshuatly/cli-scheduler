@@ -3,29 +3,23 @@
 {% block title %}Job Details - CLI Scheduler{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+<div class="card" data-job-root data-job-id="{{ job.id }}" data-initial-status="{{ job.status }}">
+    <div class="row-between" style="margin-bottom: 1rem;">
         <div>
             <h2 style="margin-top: 0;">{{ job.preset }}</h2>
-            <div style="color: var(--text-secondary); margin-bottom: 0.5rem;">ID: {{ job.id }}</div>
-            <div><span class="status {{ job.status }}">{{ job.status }}</span></div>
+            <div class="text-secondary" style="margin-bottom: 0.5rem;">ID: {{ job.id }}</div>
+            <div data-field="status"><span class="status {{ job.status }}">{{ job.status }}</span></div>
         </div>
 
-        <div style="display: flex; gap: 0.5rem;">
-            {% if job.status in ['queued', 'running'] %}
-            <form action="{{ url_for('cancel_job', job_id=job.id) }}" method="POST" style="display: inline;">
-                <button type="submit" class="btn" style="background-color: #dc3545; color: white;">Cancel</button>
-            </form>
-            {% endif %}
-            <a href="{{ url_for('submit', retry_job_id=job.id) }}" class="btn"
-                style="background-color: var(--warning); color: #000;">Edit</a>
-            <form action="{{ url_for('rerun_job', job_id=job.id) }}" method="POST" style="display: inline;">
-                <button type="submit" class="btn">Rerun</button>
-            </form>
+        <div class="actions" data-field="actions">
+            <button type="button" class="btn btn-danger" data-action="cancel"
+                {% if job.status not in ['queued', 'running'] %}hidden{% endif %}>Cancel</button>
+            <a href="{{ url_for('views.submit', retry_job_id=job.id) }}" class="btn btn-warning">Edit</a>
+            <button type="button" class="btn" data-action="rerun">Rerun</button>
         </div>
     </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+    <div class="grid-two" style="margin-bottom: 2rem;">
         <div>
             <label>Command</label>
             <code>{{ job.command }}</code>
@@ -44,44 +38,43 @@
         <div>
             <label>Timeline</label>
             <div class="timeline-cell">
-                {% if job.start_time %}
-                <div title="{{ job.start_time }}">
+                <div data-field="start-time">
+                    {% if job.start_time %}
                     Started: {{ job.start_time | time_ago }}
                     <small class="text-secondary">({{ job.start_time }})</small>
+                    {% else %}
+                    <span class="text-secondary">-</span>
+                    {% endif %}
                 </div>
-                {% endif %}
-                {% if job.end_time %}
-                <div title="{{ job.end_time }}" style="margin-top: 0.5rem;">
+                <div data-field="end-time" {% if not job.end_time %}hidden{% endif %}>
+                    {% if job.end_time %}
                     Completed: {{ job.end_time | time_ago }}
                     <small class="text-secondary">({{ job.end_time }})</small>
+                    {% endif %}
                 </div>
-                {% endif %}
-                {% if not job.start_time %}
-                <span class="text-secondary">-</span>
-                {% endif %}
             </div>
         </div>
         <div>
-            <label>Duration Stats</label>
+            <label>Duration</label>
             <div class="timeline-cell">
-                {% if job.end_time and job.start_time %}
-                <div title="Execution time">Ran: {{ job.start_time | duration(job.end_time) }}</div>
-                {% elif job.start_time and job.status == 'running' %}
-                <div title="Current runtime">Running: {{ job.start_time | duration }}</div>
-                {% else %}
-                <span style="color: var(--text-secondary)">-</span>
-                {% endif %}
-
-                {% if job.start_time %}
-                <small class="text-secondary" title="Time in queue">Queued: {{ job.created_at | duration(job.start_time)
-                    }}</small>
-                {% endif %}
+                <div data-field="ran">
+                    {% if job.end_time and job.start_time %}
+                    Ran: {{ job.start_time | duration(job.end_time) }}
+                    {% elif job.start_time and job.status == 'running' %}
+                    Running: {{ job.start_time | duration }}
+                    {% else %}-{% endif %}
+                </div>
+                <small class="text-secondary" data-field="queued" {% if not job.start_time %}hidden{% endif %}>
+                    {% if job.start_time %}
+                    Queued: {{ job.created_at | duration(job.start_time) }}
+                    {% endif %}
+                </small>
             </div>
         </div>
         <div>
             <label>Exit Code</label>
-            <div
-                class="{{ 'text-success' if job.exit_code == 0 else ('text-error' if job.exit_code is not none else 'text-primary') }}">
+            <div data-field="exit-code"
+                class="{{ 'text-success' if job.exit_code == 0 else ('text-error' if job.exit_code is not none else 'text-secondary') }}">
                 {{ job.exit_code if job.exit_code is not none else '-' }}
             </div>
         </div>
@@ -90,36 +83,8 @@
     <label>Output Log</label>
     <pre class="logs" id="log-container">{{ log_content }}</pre>
 </div>
+{% endblock %}
 
-<script>
-    const status = "{{ job.status }}";
-    const jobId = "{{ job.id }}";
-    const logContainer = document.getElementById('log-container');
-
-    function fetchLogs() {
-        fetch(`/api/job/${jobId}/log`)
-            .then(response => response.json())
-            .then(data => {
-                // Only update if content is different to avoid jitter (simple check)
-                if (data.content.length > logContainer.innerText.length) {
-                    logContainer.innerText = data.content;
-                    // Auto scroll to bottom
-                    logContainer.scrollTop = logContainer.scrollHeight;
-                }
-            })
-            .catch(err => console.error("Error fetching logs:", err));
-    }
-
-    // Poll logs if job is running or queued
-    if (status === 'running' || status === 'queued') {
-        setInterval(() => {
-            fetchLogs();
-            // Also could poll status to reload page when done
-            // For now, refreshing page manually or relying on logs update is okay
-        }, 2000);
-    }
-
-    // Initial scroll
-    logContainer.scrollTop = logContainer.scrollHeight;
-</script>
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/job.js') }}"></script>
 {% endblock %}
