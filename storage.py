@@ -22,6 +22,10 @@ class JobStore(ABC):
     def update_job(self, job_id: str, updates: Dict[str, Any]):
         pass
 
+    @abstractmethod
+    def delete_jobs(self, job_ids: List[str]) -> None:
+        pass
+
 class JsonJobStore(JobStore):
     def __init__(self, file_path: str):
         self.file_path = file_path
@@ -87,7 +91,23 @@ class JsonJobStore(JobStore):
                 if job['id'] == job_id:
                     job.update(updates)
                     break
-            
+
+            with open(self.file_path, 'w') as f:
+                json.dump(jobs, f, indent=4)
+
+    def delete_jobs(self, job_ids: List[str]) -> None:
+        if not job_ids:
+            return
+        id_set = set(job_ids)
+        with self.lock:
+            if not os.path.exists(self.file_path):
+                return
+            try:
+                with open(self.file_path, 'r') as f:
+                    jobs = json.load(f)
+            except:
+                return
+            jobs = [j for j in jobs if j['id'] not in id_set]
             with open(self.file_path, 'w') as f:
                 json.dump(jobs, f, indent=4)
 
@@ -189,11 +209,22 @@ class SqliteJobStore(JobStore):
             for k, v in updates.items():
                 fields.append(f"{k} = ?")
                 values.append(v)
-            
+
             values.append(job_id)
-            
+
             sql = f"UPDATE jobs SET {', '.join(fields)} WHERE id = ?"
             conn.execute(sql, values)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def delete_jobs(self, job_ids: List[str]) -> None:
+        if not job_ids:
+            return
+        conn = self._get_conn()
+        try:
+            placeholders = ','.join('?' * len(job_ids))
+            conn.execute(f'DELETE FROM jobs WHERE id IN ({placeholders})', job_ids)
             conn.commit()
         finally:
             conn.close()

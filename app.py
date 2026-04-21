@@ -19,7 +19,7 @@ from backend import middleware as _middleware
 from backend import views as views_blueprint
 from backend.context import SchedulerContext
 from backend.swagger import SWAGGER_CONFIG, SWAGGER_TEMPLATE
-from backend.worker import JobRunner
+from backend.worker import JobRunner, RetentionSweeper
 from storage import JsonJobStore, SqliteJobStore
 from utils import ensure_directories, get_app_paths
 
@@ -89,6 +89,8 @@ runner = JobRunner(_ctx)
 _ctx.runner = runner
 job_queue = runner.job_queue
 
+sweeper = RetentionSweeper(_ctx)
+
 app.extensions["cli_scheduler"] = _ctx
 
 _filters.register(app)
@@ -130,6 +132,7 @@ def update_job_status(job_id, status, exit_code=None):
 # --- Bootstrap ---
 runner.init_from_storage()
 runner.start()
+sweeper.start()
 
 
 if __name__ == "__main__":
