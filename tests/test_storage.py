@@ -146,8 +146,38 @@ def test_sqlite_persistence(sqlite_store_file):
     store1 = SqliteJobStore(sqlite_store_file)
     job = create_job("sql_persist")
     store1.add_job(job)
-    
+
     store2 = SqliteJobStore(sqlite_store_file)
     jobs = store2.get_all_jobs()
     assert len(jobs) == 1
     assert jobs[0]['id'] == "sql_persist"
+
+# --- Tests for delete_jobs ---
+
+def test_json_delete_jobs(json_store):
+    for i in range(3):
+        json_store.add_job(create_job(f"del_json_{i}"))
+
+    json_store.delete_jobs(["del_json_0", "del_json_2"])
+
+    remaining = json_store.get_all_jobs()
+    assert len(remaining) == 1
+    assert remaining[0]['id'] == "del_json_1"
+
+def test_json_delete_jobs_noop_on_empty(json_store):
+    json_store.delete_jobs([])
+    assert json_store.get_all_jobs() == []
+
+def test_sqlite_delete_jobs(sqlite_store):
+    for i in range(3):
+        sqlite_store.add_job(create_job(f"del_sql_{i}"))
+
+    sqlite_store.delete_jobs(["del_sql_0", "del_sql_2"])
+
+    remaining = sqlite_store.get_all_jobs()
+    assert len(remaining) == 1
+    assert remaining[0]['id'] == "del_sql_1"
+
+def test_sqlite_delete_jobs_noop_on_empty(sqlite_store):
+    sqlite_store.delete_jobs([])
+    assert sqlite_store.get_all_jobs() == []
