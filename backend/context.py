@@ -10,6 +10,7 @@ class SchedulerContext:
     def __init__(self):
         self._app_module = None
         self.runner = None
+        self.stats = None
 
     def bind(self, app_module):
         self._app_module = app_module

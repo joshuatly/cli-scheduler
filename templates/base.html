@@ -18,6 +18,8 @@
                     class="{{ 'active' if request.endpoint == 'views.index' else '' }}">Dashboard</a>
                 <a href="{{ url_for('views.presets_list') }}"
                     class="{{ 'active' if request.endpoint == 'views.presets_list' else '' }}">Presets</a>
+                <a href="{{ url_for('views.stats') }}"
+                    class="{{ 'active' if request.endpoint == 'views.stats' else '' }}">Stats</a>
                 <a href="{{ url_for('views.submit') }}" class="btn">+ New Job</a>
             </nav>
         </header>

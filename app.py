@@ -20,6 +20,7 @@ from backend import views as views_blueprint
 from backend.context import SchedulerContext
 from backend.swagger import SWAGGER_CONFIG, SWAGGER_TEMPLATE
 from backend.worker import JobRunner, RetentionSweeper
+from stats import StatsTracker
 from storage import JsonJobStore, SqliteJobStore
 from utils import ensure_directories, get_app_paths
 
@@ -30,6 +31,7 @@ ensure_directories(PATHS)
 
 CONFIG_FILE = str(PATHS["config_file"])
 LOGS_DIR = str(PATHS["logs_dir"])
+STATS_FILE = str(PATHS["stats_file"])
 
 # --- Config I/O (thin wrappers so tests can monkeypatch CONFIG_FILE) ---
 data_lock = threading.Lock()
@@ -89,6 +91,7 @@ runner = JobRunner(_ctx)
 _ctx.runner = runner
 job_queue = runner.job_queue
 
+_ctx.stats = StatsTracker(STATS_FILE)
 sweeper = RetentionSweeper(_ctx)
 
 app.extensions["cli_scheduler"] = _ctx
@@ -131,6 +134,7 @@ def update_job_status(job_id, status, exit_code=None):
 
 # --- Bootstrap ---
 runner.init_from_storage()
+_ctx.stats.rebuild_from_jobs(STORAGE.get_all_jobs())
 runner.start()
 sweeper.start()
 

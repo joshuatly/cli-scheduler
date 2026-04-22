@@ -387,6 +387,62 @@ def delete_preset(name):
     return jsonify({"message": f"Preset '{name}' deleted"})
 
 
+# --- Stats ---
+
+@bp.route("/stats", methods=["GET"])
+def get_stats():
+    """Return aggregated job statistics.
+    ---
+    tags: [Stats]
+    responses:
+      200:
+        description: Statistics
+    """
+    from stats import _DURATION_BUCKETS
+
+    ctx = _ctx()
+    data = ctx.stats.get_stats()
+    at = data["all_time"]
+
+    avg_run = (
+        at["run_seconds_total"] / at["run_seconds_count"]
+        if at.get("run_seconds_count")
+        else 0
+    )
+
+    weekly_sorted = sorted(data["weekly"].items(), key=lambda x: x[0])
+    weekly = [{"week": k, **v} for k, v in weekly_sorted[-12:]]
+
+    buckets = [
+        {"label": label, "count": data["run_duration_buckets"].get(label, 0)}
+        for label, _, _ in _DURATION_BUCKETS
+    ]
+
+    per_preset = []
+    for name, pp in data["per_preset"].items():
+        count = pp.get("run_seconds_count", 0)
+        avg = pp["run_seconds_total"] / count if count else 0
+        per_preset.append({
+            "name": name,
+            "total": pp.get("total", 0),
+            "finished": pp.get("finished", 0),
+            "failed": pp.get("failed", 0),
+            "cancelled": pp.get("cancelled", 0),
+            "avg_run_seconds": avg,
+            "min_run_seconds": pp.get("min_run_seconds"),
+            "max_run_seconds": pp.get("max_run_seconds"),
+            "last_run": pp.get("last_run"),
+        })
+    per_preset.sort(key=lambda x: x["total"], reverse=True)
+
+    return jsonify({
+        "all_time": {**at, "avg_run_seconds": avg_run},
+        "weekly": weekly,
+        "run_duration_buckets": buckets,
+        "per_preset": per_preset,
+    })
+
+
 # --- Legacy alias (kept for tests / existing links) ---
 
 @bp.route("/job/<job_id>/log", methods=["GET"])
