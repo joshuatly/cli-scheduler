@@ -411,7 +411,15 @@ def get_stats():
     )
 
     weekly_sorted = sorted(data["weekly"].items(), key=lambda x: x[0])
-    weekly = [{"week": k, **v} for k, v in weekly_sorted[-12:]]
+    weeks_param = request.args.get("weeks", "12")
+    if weeks_param == "all":
+        weekly = [{"week": k, **v} for k, v in weekly_sorted]
+    else:
+        try:
+            n = max(1, int(weeks_param))
+        except ValueError:
+            n = 12
+        weekly = [{"week": k, **v} for k, v in weekly_sorted[-n:]]
 
     buckets = [
         {"label": label, "count": data["run_duration_buckets"].get(label, 0)}

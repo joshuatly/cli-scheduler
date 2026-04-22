@@ -245,6 +245,12 @@ function render(data) {
     <div class="charts-row">
       <div class="chart-card">
         <h3>Jobs per Week</h3>
+        <div class="range-selector" id="rangeSelector">
+          <button data-weeks="12" class="active">3M</button>
+          <button data-weeks="26">6M</button>
+          <button data-weeks="52">1Y</button>
+          <button data-weeks="all">All Time</button>
+        </div>
         <div class="chart-wrap"><canvas id="weeklyChart"></canvas></div>
       </div>
       <div class="chart-card">
@@ -270,15 +276,48 @@ function render(data) {
     </div>
   `;
 
-  if (weekly.length) buildWeeklyChart(document.getElementById("weeklyChart"), weekly);
+  let weeklyChartInstance = null;
+
+  function drawWeekly(w) {
+    if (weeklyChartInstance) weeklyChartInstance.destroy();
+    const canvas = document.getElementById("weeklyChart");
+    if (canvas && w.length) weeklyChartInstance = buildWeeklyChart(canvas, w);
+  }
+
+  drawWeekly(weekly);
   buildOutcomeChart(document.getElementById("outcomeChart"), at);
   if (buckets.some(b => b.count)) buildDurationChart(document.getElementById("durationChart"), buckets);
   if (per_preset.length) buildPresetChart(document.getElementById("presetChart"), per_preset);
-
   document.getElementById("presetTable").innerHTML = buildPresetTable(per_preset);
+
+  // Range selector wires up after the DOM is ready
+  const selector = document.getElementById("rangeSelector");
+  if (selector) {
+    selector.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-weeks]");
+      if (!btn) return;
+      selector.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const weeks = btn.dataset.weeks;
+      try {
+        const resp = await fetch(`/api/stats?weeks=${weeks}`);
+        if (!resp.ok) return;
+        const refreshed = await resp.json();
+        drawWeekly(refreshed.weekly || []);
+      } catch (_) {}
+    });
+  }
 }
 
 // ---- Boot -------------------------------------------------------------------
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 async function loadStats() {
   try {
@@ -290,14 +329,6 @@ async function loadStats() {
     document.getElementById("stats-root").innerHTML =
       `<p class="text-error">Failed to load stats: ${escapeHtml(String(err))}</p>`;
   }
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 loadStats();

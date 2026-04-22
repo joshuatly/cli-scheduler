@@ -120,6 +120,27 @@
     line-height: 1.6;
     max-width: 500px;
   }
+  .range-selector {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+  }
+  .range-selector button {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .range-selector button.active,
+  .range-selector button:hover {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
   .empty-stats {
     text-align: center;
     padding: 4rem 2rem;
