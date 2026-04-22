@@ -131,10 +131,18 @@ class JobRunner:
                 if current and current.get("status") == "cancelled":
                     final = "cancelled"
                 self._update_status(job_id, final, process.returncode)
+                if getattr(self.ctx, 'stats', None):
+                    finished_job = self.ctx.storage.get_job(job_id)
+                    if finished_job:
+                        self.ctx.stats.record_job(finished_job)
         except Exception as e:
             with open(log_path, "a") as log_file:
                 log_file.write(f"\n\nSystem Error: {str(e)}\n")
             self._update_status(job_id, "failed", -1)
+            if getattr(self.ctx, 'stats', None):
+                failed_job = self.ctx.storage.get_job(job_id)
+                if failed_job:
+                    self.ctx.stats.record_job(failed_job)
         finally:
             with self._process_lock:
                 self._running.pop(job_id, None)
@@ -198,8 +206,14 @@ class RetentionSweeper:
         if not to_delete:
             return
 
-        for job in terminal:
-            if job["id"] in to_delete and job.get("log_file"):
+        jobs_to_delete = [j for j in terminal if j["id"] in to_delete]
+
+        # Record stats before deletion so history survives the sweep.
+        if getattr(self.ctx, 'stats', None):
+            self.ctx.stats.record_sweep(jobs_to_delete)
+
+        for job in jobs_to_delete:
+            if job.get("log_file"):
                 try:
                     os.remove(os.path.join(self.ctx.logs_dir, job["log_file"]))
                 except FileNotFoundError:
