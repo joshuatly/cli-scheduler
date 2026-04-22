@@ -119,6 +119,11 @@ def delete_preset():
     return redirect(url_for("views.presets_list"))
 
 
+@bp.route("/stats")
+def stats():
+    return render_template("stats.html")
+
+
 @bp.route("/job/<job_id>")
 def job_details(job_id):
     ctx = _ctx()

@@ -35,7 +35,8 @@ def get_app_paths():
         "data_dir": data_dir,
         "logs_dir": data_dir / 'logs',
         "db_file": data_dir / 'jobs.db',
-        "jobs_file": data_dir / 'jobs.json'
+        "jobs_file": data_dir / 'jobs.json',
+        "stats_file": data_dir / 'stats.json',
     }
 
 def ensure_directories(paths):

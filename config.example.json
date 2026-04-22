@@ -7,6 +7,8 @@
         "192.168.*"
     ],
     "footer_text": "CLI Scheduler - default footer",
+    "retention_max_jobs": 1000,
+    "retention_max_age_days": 90,
     "presets": [
         {
             "name": "Echo Test",
