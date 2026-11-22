@@ -1,0 +1,10 @@
+{
+  "name": "cli-scheduler-sender",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension that sends links and pages to CLI Scheduler.",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build": "bash scripts/build.sh"
+  }
+}

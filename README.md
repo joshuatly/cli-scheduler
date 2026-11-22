@@ -135,6 +135,10 @@ From any job detail page, click **Edit** to open the New Job form pre-filled wit
 /submit?retry_job_id=<job_id>
 ```
 
+### 5. Chrome Extension
+
+`browser-extension/` contains a Chrome extension that adds **Send link / Send page to CLI Scheduler** to the right-click menu, with presets chosen by domain. See [browser-extension/README.md](browser-extension/README.md) for install and release steps.
+
 ## Configuration
 
 The application stores configuration and data in standard system locations:
