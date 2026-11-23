@@ -12,7 +12,10 @@ export const DEFAULT_SETTINGS = {
   schemaVersion: SCHEMA_VERSION,
   // [{ id: "i0", name: "Home server", serverUrl: "http://192.168.1.10:5000", cwd: "" }]
   instances: [],
-  // The instance and preset used when no rule matches.
+  // What happens when no rule matches: "preset" sends to defaultTarget,
+  // "none" sends nothing. A fresh install has no default preset yet.
+  defaultAction: "none",
+  // The instance and preset used when no rule matches and defaultAction is "preset".
   defaultTarget: { instanceId: "", preset: "" },
   // Each rule sends to exactly one preset on exactly one instance.
   // [{ pattern: "youtube.com/playlist", instanceId: "i0", preset: "yt-dlp Audio" }]
@@ -106,6 +109,7 @@ export function migrateSettings(stored) {
   };
 
   if (Array.isArray(s.instances)) {
+    const preset = (s.defaultTarget && s.defaultTarget.preset) || "";
     return {
       ...base,
       schemaVersion: SCHEMA_VERSION,
@@ -117,8 +121,9 @@ export function migrateSettings(stored) {
       })),
       defaultTarget: {
         instanceId: (s.defaultTarget && s.defaultTarget.instanceId) || "",
-        preset: (s.defaultTarget && s.defaultTarget.preset) || "",
+        preset,
       },
+      defaultAction: normalizeDefaultAction(s.defaultAction, preset),
       rules: (s.rules || []).map((r) => ({
         pattern: r.pattern || "",
         instanceId: r.instanceId || "",
@@ -135,8 +140,23 @@ export function migrateSettings(stored) {
     schemaVersion: SCHEMA_VERSION,
     instances: [{ id, name: "", serverUrl, cwd: s.cwd || "" }],
     defaultTarget: { instanceId: id, preset: s.defaultPreset || "" },
+    defaultAction: normalizeDefaultAction(undefined, s.defaultPreset),
     rules: (s.rules || []).map((r) => ({ pattern: r.pattern || "", instanceId: id, preset: r.preset || "" })),
   };
+}
+
+/**
+ * "preset" or "none". Settings saved before this option existed get "none"
+ * when they had no default preset, since nothing could be sent for them anyway.
+ */
+function normalizeDefaultAction(action, preset) {
+  if (action === "preset" || action === "none") return action;
+  return preset ? "preset" : "none";
+}
+
+/** The default target, or null when unmatched URLs should not be sent. */
+export function effectiveDefault(settings) {
+  return settings.defaultAction === "none" ? null : settings.defaultTarget;
 }
 
 /**
@@ -159,7 +179,7 @@ function patternKey(pattern) {
  * problem, or null when everything is fine.
  */
 export function validateSettings(settings) {
-  const { instances = [], rules = [], defaultTarget } = settings;
+  const { instances = [], rules = [], defaultTarget, defaultAction } = settings;
   if (!instances.length) return "Add at least one scheduler instance.";
 
   const ids = new Set();
@@ -180,9 +200,11 @@ export function validateSettings(settings) {
     names.set(key, inst);
   }
 
-  // An empty default preset means "no default"; a set one must name a real instance.
-  if (defaultTarget && defaultTarget.preset && !ids.has(defaultTarget.instanceId)) {
-    return "Choose which instance the default preset is on.";
+  if (defaultAction !== "none") {
+    if (!defaultTarget || !defaultTarget.preset) {
+      return 'Choose a default preset, or set "When no rule matches" to "Do nothing".';
+    }
+    if (!ids.has(defaultTarget.instanceId)) return "Choose which instance the default preset is on.";
   }
 
   const seen = new Map();

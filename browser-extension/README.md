@@ -1,6 +1,6 @@
 # CLI Scheduler Sender (Chrome extension)
 
-Right-click a **link** to send that link, or right-click anywhere on a **page** to send the page's address, to your CLI Scheduler. If you run more than one scheduler (say, a desktop and a NAS), add each one as an **instance**. The instance and preset are chosen by rules based on the link's domain, with a default preset as fallback. You can also pick a preset by hand from a submenu.
+Right-click a **link** to send that link, or right-click anywhere on a **page** to send the page's address, to your CLI Scheduler. If you run more than one scheduler (say, a desktop and a NAS), add each one as an **instance**. The instance and preset are chosen by rules based on the link's domain. When no rule matches, the link goes to a default preset, or nowhere if you prefer. You can also pick a preset by hand from a submenu.
 
 Works in Chrome 116+ and other Chromium browsers (Edge, Brave). No changes to the scheduler are needed. It uses the existing `GET /api/presets` and `POST /api/jobs` endpoints.
 
@@ -8,7 +8,7 @@ Works in Chrome 116+ and other Chromium browsers (Edge, Brave). No changes to th
 
 1. Download `cli-scheduler-sender-<version>.zip` from the [Releases](https://github.com/joshuatly/cli-scheduler/releases) page and unzip it, or use `browser-extension/src/` from a checkout.
 2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and choose the unzipped folder (the one containing `manifest.json`).
-3. The settings page opens. Enter the scheduler address (e.g. `http://192.168.1.10:5000`), click **Test connection**, allow the permission prompt, choose a default preset, and click **Save**.
+3. The settings page opens. Enter the scheduler address (e.g. `http://192.168.1.10:5000`), click **Test connection**, allow the permission prompt, choose what happens when no rule matches (a default preset, or **Do nothing**), and click **Save**.
 4. To add another scheduler, click **Add instance**, give it a name and an address, and click **Save** again. Chrome asks once for permission to reach each new address.
 
 The computer running Chrome must be allowed by each scheduler's `allowed_ips` in `config.json`, otherwise sending fails with a 403 error.
@@ -17,7 +17,7 @@ The settings page links to this repository, its issues and its releases.
 
 ### Upgrading from 0.1.x
 
-Your existing server, working directory, default preset and rules become a single instance automatically. Nothing needs to be re-entered. The old settings keys are left in place, so another computer whose Chrome is still on 0.1.x keeps working.
+Your existing server, working directory, default preset and rules become a single instance automatically. Nothing needs to be re-entered. If you had no default preset, **When no rule matches** is set to **Do nothing**. The old settings keys are left in place, so another computer whose Chrome is still on 0.1.x keeps working.
 
 ## Use
 
@@ -42,7 +42,14 @@ Clicking the toolbar icon opens the settings.
 | `music.youtube.com` | that subdomain and below only |
 | `youtube.com/playlist` | `/playlist` and paths below it on youtube.com and its subdomains |
 
-`https://`, `*.` and `www.` in a pattern are ignored, so pasting a URL works. When several rules match, the longest host wins, then the longest path. If nothing matches, the default preset is used. Use **Check which preset a URL gets** on the settings page to try it out. It also warns when the chosen instance has no preset with that name.
+`https://`, `*.` and `www.` in a pattern are ignored, so pasting a URL works. When several rules match, the longest host wins, then the longest path. If nothing matches, **When no rule matches** decides:
+
+| Setting | What happens to an unmatched link |
+|---|---|
+| **Send to a default preset** | It's sent to the default preset on the chosen instance. |
+| **Do nothing** | Nothing is sent and no error is shown. The toolbar icon briefly shows a grey **–** so you can tell the click was received. |
+
+With the submenu off, **Do nothing** makes the menu item act only on links that a rule covers. With it on, **Auto (domain rules)** behaves the same way, and you can still pick any preset by hand. Use **Check which preset a URL gets** on the settings page to try it out. It also warns when the chosen instance has no preset with that name.
 
 Each rule, and the default, sends to **one preset on one instance**: with several instances, every rule has an instance picker next to its preset, and the preset suggestions come from that instance. Two rules for the same address (`youtube.com` and `https://www.youtube.com/`, for example) can't be saved, so a domain never goes to two places. A different path (`youtube.com/playlist`) is a different address and can point at another instance. Removing an instance also removes the rules that send to it, after asking.
 

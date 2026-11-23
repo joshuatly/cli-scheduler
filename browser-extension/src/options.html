@@ -26,10 +26,18 @@
 
     <section>
       <h2>Presets</h2>
-      <label for="defaultPreset">Default preset</label>
-      <div class="target" id="defaultTargetRow">
-        <select id="defaultInstance" class="instance" aria-label="Instance for the default preset"></select>
-        <input id="defaultPreset" class="preset" placeholder="Used when no rule below matches" spellcheck="false">
+      <label for="defaultAction">When no rule matches</label>
+      <select id="defaultAction" class="narrow">
+        <option value="preset">Send to a default preset</option>
+        <option value="none">Do nothing</option>
+      </select>
+      <p class="hint" id="noneHint">Links that no rule below matches are not sent. You can still pick a preset by hand from the submenu, if it's on.</p>
+      <div id="defaultPresetField">
+        <label for="defaultPreset">Default preset</label>
+        <div class="target" id="defaultTargetRow">
+          <select id="defaultInstance" class="instance" aria-label="Instance for the default preset"></select>
+          <input id="defaultPreset" class="preset" placeholder="Used when no rule below matches" spellcheck="false">
+        </div>
       </div>
 
       <h3>Rules by domain</h3>

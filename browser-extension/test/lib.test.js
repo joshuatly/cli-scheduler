@@ -6,6 +6,7 @@ import {
   defaultInstanceName,
   describeFailure,
   describeTarget,
+  effectiveDefault,
   fetchPresets,
   instanceLabel,
   isSendableUrl,
@@ -113,6 +114,7 @@ test("migrateSettings turns 0.1.x settings into one instance", () => {
   assert.equal(s.schemaVersion, 2);
   assert.deepEqual(s.instances, [{ id: LEGACY_INSTANCE_ID, name: "", serverUrl: "http://192.168.1.5:5000", cwd: "/data" }]);
   assert.deepEqual(s.defaultTarget, { instanceId: LEGACY_INSTANCE_ID, preset: "Echo" });
+  assert.equal(s.defaultAction, "preset");
   assert.deepEqual(s.rules, [{ pattern: "youtube.com", instanceId: LEGACY_INSTANCE_ID, preset: "yt-dlp" }]);
   assert.equal(s.presetSubmenu, false);
   // Repeatable: the same input always gives the same ids.
@@ -126,6 +128,31 @@ test("migrateSettings gives a fresh install one localhost instance", () => {
   assert.deepEqual(s.rules, []);
   assert.equal(s.presetSubmenu, true);
   assert.equal(s.notifyOnSuccess, true);
+  // No default preset yet, so unmatched links aren't sent until one is chosen.
+  assert.equal(s.defaultAction, "none");
+});
+
+test("migrateSettings maps an empty 0.1.x default preset to Do nothing", () => {
+  assert.equal(migrateSettings({ serverUrl: "http://h", defaultPreset: "" }).defaultAction, "none");
+});
+
+test("migrateSettings keeps an explicit default action", () => {
+  const base = { instances: [{ id: "a", serverUrl: "http://a" }], defaultTarget: { instanceId: "a", preset: "P" } };
+  assert.equal(migrateSettings({ ...base, defaultAction: "none" }).defaultAction, "none");
+  assert.equal(migrateSettings({ ...base, defaultAction: "preset" }).defaultAction, "preset");
+  assert.equal(migrateSettings(base).defaultAction, "preset");
+  assert.equal(migrateSettings({ ...base, defaultAction: "bogus" }).defaultAction, "preset");
+  // The default preset is kept while Do nothing is on, so switching back restores it.
+  assert.deepEqual(migrateSettings({ ...base, defaultAction: "none" }).defaultTarget, base.defaultTarget);
+});
+
+test("Do nothing: unmatched URLs resolve to no preset, matched ones still go to their rule", () => {
+  const settings = { defaultAction: "none", defaultTarget: { instanceId: "home", preset: "Default" } };
+  assert.equal(effectiveDefault(settings), null);
+  assert.equal(resolveTarget("https://example.com/", RULES, effectiveDefault(settings)).preset, "");
+  assert.equal(resolveTarget("https://soundcloud.com/x", RULES, effectiveDefault(settings)).preset, "Audio");
+  const send = { ...settings, defaultAction: "preset" };
+  assert.equal(resolveTarget("https://example.com/", RULES, effectiveDefault(send)).preset, "Default");
 });
 
 test("migrateSettings keeps 0.2 settings and ignores stale 0.1 keys", () => {
@@ -158,6 +185,7 @@ const TWO = [
 ];
 const valid = (over = {}) => ({
   instances: TWO,
+  defaultAction: "preset",
   defaultTarget: { instanceId: "home", preset: "Echo" },
   rules: [
     { pattern: "youtube.com", instanceId: "home", preset: "Video" },
@@ -168,8 +196,14 @@ const valid = (over = {}) => ({
 
 test("validateSettings accepts a good multi-instance setup", () => {
   assert.equal(validateSettings(valid()), null);
-  // No default preset is fine.
-  assert.equal(validateSettings(valid({ defaultTarget: { instanceId: "home", preset: "" } })), null);
+});
+
+test("validateSettings: a default preset is required unless Do nothing is chosen", () => {
+  const empty = { defaultTarget: { instanceId: "home", preset: "" } };
+  assert.match(validateSettings(valid(empty)), /Do nothing/);
+  assert.equal(validateSettings(valid({ ...empty, defaultAction: "none" })), null);
+  // A leftover default pointing at a removed instance doesn't matter with Do nothing.
+  assert.equal(validateSettings(valid({ defaultAction: "none", defaultTarget: { instanceId: "gone", preset: "P" } })), null);
 });
 
 test("validateSettings rejects a domain that would go to two places", () => {
@@ -204,9 +238,9 @@ test("validateSettings requires distinct instance names and valid addresses", ()
     { id: "x", name: "", serverUrl: "http://h:5000" },
     { id: "y", name: "", serverUrl: "http://h:5000" },
   ];
-  assert.match(validateSettings({ instances: unnamed, rules: [], defaultTarget: null }), /Two instances are called "h:5000"/);
+  assert.match(validateSettings({ instances: unnamed, rules: [], defaultAction: "none" }), /Two instances are called "h:5000"/);
   const bad = [{ id: "x", name: "X", serverUrl: "ftp://h" }];
-  assert.match(validateSettings({ instances: bad, rules: [] }), /Instance "X".*http/);
+  assert.match(validateSettings({ instances: bad, rules: [], defaultAction: "none" }), /Instance "X".*http/);
 });
 
 // --- Labels -------------------------------------------------------------------

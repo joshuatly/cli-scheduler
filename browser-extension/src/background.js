@@ -1,6 +1,7 @@
 import {
   SCHEMA_VERSION,
   describeTarget,
+  effectiveDefault,
   fetchPresets,
   isSendableUrl,
   migrateSettings,
@@ -25,10 +26,10 @@ async function getSettings() {
 async function persistMigration() {
   const stored = await chrome.storage.sync.get(null);
   if (stored.schemaVersion === SCHEMA_VERSION) return;
-  const { instances, defaultTarget, rules } = migrateSettings(stored);
+  const { instances, defaultTarget, defaultAction, rules } = migrateSettings(stored);
   // The 0.1.x keys (serverUrl, cwd, defaultPreset) are left in place, so a
   // synced Chrome still on 0.1.x keeps working.
-  await chrome.storage.sync.set({ schemaVersion: SCHEMA_VERSION, instances, defaultTarget, rules });
+  await chrome.storage.sync.set({ schemaVersion: SCHEMA_VERSION, instances, defaultTarget, defaultAction, rules });
 }
 
 async function hasServerPermission(serverUrl) {
@@ -165,8 +166,11 @@ async function send(url, explicit) {
     return notifyError("Only http:// and https:// links can be sent.", url);
   }
 
-  const target = explicit || resolveTarget(url, settings.rules, settings.defaultTarget);
+  const target = explicit || resolveTarget(url, settings.rules, effectiveDefault(settings));
   if (!target.preset) {
+    // "Do nothing" was chosen for unmatched URLs: send nothing and raise no error.
+    // A brief grey badge shows the click was received.
+    if (settings.defaultAction === "none") return flashBadge("–", "#6e7781");
     return notifyError("No preset matched and no default preset is set. Open settings to choose one.", null, "options");
   }
   const instance = settings.instances.find((i) => i.id === target.instanceId);

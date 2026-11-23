@@ -3,6 +3,7 @@ import {
   SCHEMA_VERSION,
   defaultInstanceName,
   describeTarget,
+  effectiveDefault,
   fetchPresets,
   instanceLabel,
   migrateSettings,
@@ -87,7 +88,7 @@ function removeInstance(card) {
   }
   const label = instanceLabel(instances.find((i) => i.id === id));
   const ruleRows = [...rulesEl.querySelectorAll(".rule")].filter((row) => row.querySelector(".instance").value === id);
-  const usedByDefault = $("defaultInstance").value === id && $("defaultPreset").value.trim();
+  const usedByDefault = $("defaultAction").value === "preset" && $("defaultInstance").value === id && $("defaultPreset").value.trim();
   const uses = [];
   if (ruleRows.length) {
     uses.push(ruleRows.length === 1 ? "1 rule that sends to it will be removed" : `${ruleRows.length} rules that send to it will be removed`);
@@ -256,12 +257,25 @@ function readDefaultTarget() {
   return { instanceId: $("defaultInstance").value, preset: $("defaultPreset").value.trim() };
 }
 
+/** Show the default preset fields only when unmatched links go to one. */
+function syncDefaultAction() {
+  const none = $("defaultAction").value === "none";
+  $("defaultPresetField").hidden = none;
+  $("noneHint").hidden = !none;
+}
+
 function updateTry() {
   const url = $("tryUrl").value.trim();
   const out = $("tryResult");
   if (!url) return setStatus(out, "");
   const instances = readInstances();
-  const { instanceId, preset, rule } = resolveTarget(url, readRules(), readDefaultTarget());
+  const action = $("defaultAction").value;
+  const { instanceId, preset, rule } = resolveTarget(
+    url,
+    readRules(),
+    effectiveDefault({ defaultAction: action, defaultTarget: readDefaultTarget() }),
+  );
+  if (!preset && action === "none") return setStatus(out, "→ Nothing is sent: no rule matches.");
   if (!preset) return setStatus(out, "No rule matches and no default preset is set.", "err");
   const where = describeTarget(instances, instanceId, preset);
   const known = presetsByInstance[instanceId];
@@ -289,6 +303,8 @@ async function load() {
   });
   $("defaultInstance").dataset.want = s.defaultTarget.instanceId;
   $("defaultPreset").value = s.defaultTarget.preset;
+  $("defaultAction").value = s.defaultAction;
+  syncDefaultAction();
   refreshInstanceSelects();
   s.rules.forEach((r) => addRuleRow(r));
   $("presetSubmenu").checked = s.presetSubmenu;
@@ -324,6 +340,7 @@ $("save").addEventListener("click", () => {
   const settings = {
     schemaVersion: SCHEMA_VERSION,
     instances,
+    defaultAction: $("defaultAction").value,
     defaultTarget: readDefaultTarget(),
     rules: readRules(),
     presetSubmenu: $("presetSubmenu").checked,
@@ -373,6 +390,10 @@ $("addRule").addEventListener("click", () => addRuleRow().querySelector(".patter
 $("tryUrl").addEventListener("input", updateTry);
 $("defaultPreset").addEventListener("input", () => {
   markUnknownPreset($("defaultPreset"), $("defaultInstance").value);
+  updateTry();
+});
+$("defaultAction").addEventListener("change", () => {
+  syncDefaultAction();
   updateTry();
 });
 $("defaultInstance").addEventListener("change", (e) => {
