@@ -80,6 +80,10 @@ Click "Presets" in the navigation bar.
 *   **Add**: Create new command templates.
 *   **Edit/Delete**: Manage existing presets.
 
+### Input escaping
+
+The value substituted for `{url}` is escaped for the shell before the command runs, so input such as `$(...)`, backticks or `; rm ...` is passed to the program as plain text. Presets can use `{url}`, `"{url}"` or `'{url}'`; each is escaped for its own quoting. On Windows, input containing a double quote or a line break is rejected with a 400 error, because `cmd.exe` cannot escape it safely. Custom commands are run as typed.
+
 ### 4. URL-Driven Job Submission
 
 The `/submit` route supports query parameters for automation, bookmarks, and external integrations.

@@ -7,6 +7,7 @@ import os
 import uuid
 from datetime import datetime
 
+from backend.command import UnsafeInputError, render_command
 from flask import Blueprint, current_app, jsonify, request
 
 
@@ -128,12 +129,13 @@ def submit_jobs():
     if not urls:
         return jsonify({"error": "No URLs provided for a preset that requires {url}"}), 400
 
-    new_jobs = []
-    for url in urls:
-        job = _build_job(preset_name, preset_cmd, url, cwd)
+    try:
+        new_jobs = [_build_job(preset_name, preset_cmd, url, cwd) for url in urls]
+    except UnsafeInputError as e:
+        return jsonify({"error": str(e)}), 400
+    for job in new_jobs:
         ctx.storage.add_job(job)
         ctx.runner.submit(job["id"])
-        new_jobs.append(job)
     return jsonify({"jobs": new_jobs}), 201
 
 
@@ -462,7 +464,7 @@ def legacy_job_log(job_id):
 
 def _build_job(preset_name, preset_cmd, url, cwd):
     job_id = str(uuid.uuid4())
-    command = preset_cmd.replace("{url}", url) if "{url}" in preset_cmd else preset_cmd
+    command = render_command(preset_cmd, url)
     return {
         "id": job_id,
         "command": command,
