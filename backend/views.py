@@ -8,6 +8,7 @@ import os
 import uuid
 from datetime import datetime
 
+from backend.command import UnsafeInputError, render_command
 from flask import Blueprint, current_app, redirect, render_template, request, url_for
 
 
@@ -193,11 +194,7 @@ def _handle_submit_post(cfg, ctx):
     if not urls and "{url}" not in preset_cmd:
         urls = [""]
 
-    for url in urls:
-        job = _build_job(preset_name, preset_cmd, url, cwd)
-        ctx.storage.add_job(job)
-        ctx.runner.submit(job["id"])
-    return redirect(url_for("views.index"))
+    return _queue_jobs(ctx, preset_name, preset_cmd, urls, cwd)
 
 
 def _handle_autoqueue(cfg, ctx):
@@ -215,8 +212,15 @@ def _handle_autoqueue(cfg, ctx):
     if not urls and "{url}" not in preset_cmd:
         urls = [""]
 
-    for url in urls:
-        job = _build_job(preset_name, preset_cmd, url, cwd)
+    return _queue_jobs(ctx, preset_name, preset_cmd, urls, cwd)
+
+
+def _queue_jobs(ctx, preset_name, preset_cmd, urls, cwd):
+    try:
+        jobs = [_build_job(preset_name, preset_cmd, url, cwd) for url in urls]
+    except UnsafeInputError as e:
+        return str(e), 400
+    for job in jobs:
         ctx.storage.add_job(job)
         ctx.runner.submit(job["id"])
     return redirect(url_for("views.index"))
@@ -251,7 +255,7 @@ def _prefill_values(ctx):
 
 def _build_job(preset_name, preset_cmd, url, cwd):
     job_id = str(uuid.uuid4())
-    command = preset_cmd.replace("{url}", url) if "{url}" in preset_cmd else preset_cmd
+    command = render_command(preset_cmd, url)
     return {
         "id": job_id,
         "command": command,
