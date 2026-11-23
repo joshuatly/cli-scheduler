@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CLI Scheduler Sender settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>CLI Scheduler Sender</h1>
+    <p class="lead">Right-click a link or a page and choose <strong>Send … to CLI Scheduler</strong>. The URL is queued on your scheduler with the preset chosen below.</p>
+
+    <section>
+      <h2>Scheduler</h2>
+      <label for="serverUrl">Server address</label>
+      <div class="row">
+        <input id="serverUrl" type="url" placeholder="http://192.168.1.10:5000" autocomplete="off" spellcheck="false">
+        <button id="test" type="button">Test connection</button>
+      </div>
+      <p id="testStatus" class="status" role="status"></p>
+      <p class="hint">Chrome will ask once for permission to reach this address. The computer running Chrome must be listed in the scheduler's <code>allowed_ips</code>.</p>
+
+      <label for="cwd">Working directory <span class="optional">(optional)</span></label>
+      <input id="cwd" type="text" placeholder="Leave empty to use the preset's or the scheduler's default" spellcheck="false">
+    </section>
+
+    <section>
+      <h2>Presets</h2>
+      <label for="defaultPreset">Default preset</label>
+      <input id="defaultPreset" list="presetList" placeholder="Used when no rule below matches" spellcheck="false">
+      <datalist id="presetList"></datalist>
+
+      <h3>Rules by domain</h3>
+      <p class="hint"><code>youtube.com</code> matches youtube.com and every subdomain (www., m., music.). Add a path to narrow it: <code>youtube.com/playlist</code>. The most specific matching rule wins.</p>
+      <div id="rules"></div>
+      <button id="addRule" type="button" class="secondary">Add rule</button>
+
+      <label for="tryUrl" class="spaced">Check which preset a URL gets</label>
+      <input id="tryUrl" type="url" placeholder="https://www.youtube.com/watch?v=…" spellcheck="false">
+      <p id="tryResult" class="status" role="status"></p>
+    </section>
+
+    <section>
+      <h2>Menu and notifications</h2>
+      <label class="check"><input id="presetSubmenu" type="checkbox"> Show a submenu listing every preset, so you can pick one by hand</label>
+      <label class="check"><input id="notifyOnSuccess" type="checkbox"> Show a notification when a job is queued (errors are always shown)</label>
+    </section>
+
+    <div class="actions">
+      <button id="save" type="button">Save</button>
+      <p id="saveStatus" class="status" role="status"></p>
+    </div>
+  </main>
+
+  <template id="ruleTemplate">
+    <div class="rule">
+      <input class="pattern" type="text" placeholder="example.com" aria-label="Domain pattern" spellcheck="false">
+      <span class="arrow" aria-hidden="true">→</span>
+      <input class="preset" list="presetList" placeholder="Preset" aria-label="Preset" spellcheck="false">
+      <button class="remove secondary" type="button" aria-label="Remove rule">Remove</button>
+    </div>
+  </template>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>
