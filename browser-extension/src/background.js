@@ -1,9 +1,13 @@
 import {
-  DEFAULT_SETTINGS,
+  SCHEMA_VERSION,
+  describeTarget,
   fetchPresets,
   isSendableUrl,
+  migrateSettings,
+  normalizePresetCache,
   originPattern,
-  resolvePreset,
+  presetMenuEntries,
+  resolveTarget,
   submitJob,
 } from "./lib.js";
 
@@ -14,8 +18,17 @@ const ICON = "icons/icon128.png";
 // --- Settings ---------------------------------------------------------------
 
 async function getSettings() {
-  const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-  return { ...DEFAULT_SETTINGS, ...stored };
+  return migrateSettings(await chrome.storage.sync.get(null));
+}
+
+/** Write 0.1.x settings back in the current shape, once, after an update. */
+async function persistMigration() {
+  const stored = await chrome.storage.sync.get(null);
+  if (stored.schemaVersion === SCHEMA_VERSION) return;
+  const { instances, defaultTarget, rules } = migrateSettings(stored);
+  // The 0.1.x keys (serverUrl, cwd, defaultPreset) are left in place, so a
+  // synced Chrome still on 0.1.x keeps working.
+  await chrome.storage.sync.set({ schemaVersion: SCHEMA_VERSION, instances, defaultTarget, rules });
 }
 
 async function hasServerPermission(serverUrl) {
@@ -26,19 +39,29 @@ async function hasServerPermission(serverUrl) {
   }
 }
 
-/** Fetch presets from the server, falling back to the last good list. */
-async function loadPresets(settings) {
-  if (await hasServerPermission(settings.serverUrl)) {
-    try {
-      const presets = await fetchPresets(settings.serverUrl);
-      await chrome.storage.local.set({ presetCache: presets });
-      return presets;
-    } catch {
-      // Server offline: use the cache below.
-    }
-  }
-  const { presetCache = [] } = await chrome.storage.local.get("presetCache");
-  return presetCache;
+/** Preset names per instance id from the last successful fetch. */
+async function readPresetCache() {
+  const { presetCache } = await chrome.storage.local.get("presetCache");
+  return normalizePresetCache(presetCache);
+}
+
+/** Fetch presets from every instance, falling back to the last good list for any that are offline. */
+async function loadAllPresets(settings) {
+  const cache = await readPresetCache();
+  const result = {};
+  await Promise.all(
+    settings.instances.map(async (inst) => {
+      result[inst.id] = cache[inst.id] || [];
+      if (!(await hasServerPermission(inst.serverUrl))) return;
+      try {
+        result[inst.id] = await fetchPresets(inst.serverUrl);
+      } catch {
+        // Offline: keep the cached list.
+      }
+    }),
+  );
+  await chrome.storage.local.set({ presetCache: result }); // also drops removed instances
+  return result;
 }
 
 // --- Context menus ----------------------------------------------------------
@@ -67,7 +90,8 @@ function rebuildMenus() {
 
 async function doRebuild() {
   const settings = await getSettings();
-  const presets = settings.presetSubmenu ? await loadPresets(settings) : [];
+  const presets = settings.presetSubmenu ? await loadAllPresets(settings) : {};
+  const entries = presetMenuEntries(settings.instances, presets);
   await chrome.contextMenus.removeAll();
 
   for (const target of TARGETS) {
@@ -82,19 +106,21 @@ async function doRebuild() {
       title: "Auto (domain rules)",
       contexts: target.contexts,
     });
-    if (presets.length) {
+    let sep = 0;
+    for (const [i, entry] of entries.entries()) {
+      if (i === 0 || entry.groupStart) {
+        await create({
+          id: target.kind + SEP + "sep" + sep++,
+          parentId: target.kind,
+          type: "separator",
+          contexts: target.contexts,
+        });
+      }
       await create({
-        id: target.kind + SEP + "sep",
+        // Instance ids never contain SEP, so everything after the id is the preset name.
+        id: [target.kind, "preset", entry.instanceId, entry.preset].join(SEP),
         parentId: target.kind,
-        type: "separator",
-        contexts: target.contexts,
-      });
-    }
-    for (const name of presets) {
-      await create({
-        id: target.kind + SEP + "preset" + SEP + name,
-        parentId: target.kind,
-        title: name.replace(/&/g, "&&"), // a single & marks an access key in menus
+        title: entry.title.replace(/&/g, "&&"), // a single & marks an access key in menus
         contexts: target.contexts,
       });
     }
@@ -102,6 +128,7 @@ async function doRebuild() {
 }
 
 chrome.runtime.onInstalled.addListener(async (details) => {
+  await persistMigration();
   await rebuildMenus();
   if (details.reason === "install") chrome.runtime.openOptionsPage();
 });
@@ -125,45 +152,45 @@ chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
 // --- Sending ----------------------------------------------------------------
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  const [kind, mode, ...rest] = String(info.menuItemId).split(SEP);
+  const [kind, mode, instanceId, ...rest] = String(info.menuItemId).split(SEP);
   const url = kind === "link" ? info.linkUrl : info.pageUrl || (tab && tab.url);
-  const explicitPreset = mode === "preset" ? rest.join(SEP) : null;
-  await send(url, explicitPreset);
+  const explicit = mode === "preset" ? { instanceId, preset: rest.join(SEP) } : null;
+  await send(url, explicit);
 });
 
-async function send(url, explicitPreset) {
+async function send(url, explicit) {
   const settings = await getSettings();
 
   if (!url || !isSendableUrl(url)) {
     return notifyError("Only http:// and https:// links can be sent.", url);
   }
-  if (!(await hasServerPermission(settings.serverUrl))) {
+
+  const target = explicit || resolveTarget(url, settings.rules, settings.defaultTarget);
+  if (!target.preset) {
+    return notifyError("No preset matched and no default preset is set. Open settings to choose one.", null, "options");
+  }
+  const instance = settings.instances.find((i) => i.id === target.instanceId);
+  if (!instance) {
+    return notifyError("The preset points at a scheduler instance that was removed. Open settings to fix it.", null, "options");
+  }
+  if (!(await hasServerPermission(instance.serverUrl))) {
     return notifyError(
-      "This extension doesn't have access to the scheduler yet. Open its settings and press Save.",
+      `This extension doesn't have access to ${instance.serverUrl} yet. Open its settings and press Save.`,
       null,
       "options",
     );
   }
 
-  let preset = explicitPreset;
-  if (!preset) {
-    preset = resolvePreset(url, settings.rules, settings.defaultPreset).preset;
+  const where = describeTarget(settings.instances, instance.id, target.preset);
+  const result = await submitJob({ serverUrl: instance.serverUrl, preset: target.preset, url, cwd: instance.cwd });
+  if (!result.ok) {
+    return notifyError(settings.instances.length > 1 ? `${where}: ${result.error}` : result.error, url);
   }
-  if (!preset) {
-    return notifyError("No preset matched and no default preset is set. Open settings to choose one.", null, "options");
-  }
-
-  const result = await submitJob({ serverUrl: settings.serverUrl, preset, url, cwd: settings.cwd });
-  if (!result.ok) return notifyError(result.error, url);
 
   flashBadge("✓", "#1a7f37");
   if (settings.notifyOnSuccess) {
     const job = result.jobs[0];
-    notify(
-      job ? `open:${settings.serverUrl}/job/${job.id}` : "",
-      `Queued with "${preset}"`,
-      url,
-    );
+    notify(job ? `open:${instance.serverUrl}/job/${job.id}` : "", `Queued with ${where}`, url);
   }
 }
 

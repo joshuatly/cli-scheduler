@@ -8,6 +8,8 @@
   --accent-fg: #ffffff;
   --ok: #1a7f37;
   --err: #cf222e;
+  --warn: #9a6700;
+  --card: #f6f8fa;
   color-scheme: light;
 }
 
@@ -22,6 +24,8 @@
     --accent-fg: #0d1117;
     --ok: #3fb950;
     --err: #f85149;
+    --warn: #d29922;
+    --card: #151b23;
     color-scheme: dark;
   }
 }
@@ -36,7 +40,12 @@ body {
 }
 
 main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
-h1 { font-size: 22px; margin: 0 0 4px; }
+h1 { font-size: 22px; margin: 0; }
+.page-head { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+a { color: var(--accent); }
+.repo { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); text-decoration: none; font-size: 13px; }
+.repo:hover { color: var(--accent); text-decoration: underline; }
+.repo svg { flex: none; }
 h2 { font-size: 16px; margin: 0 0 12px; }
 h3 { font-size: 14px; margin: 20px 0 4px; }
 .lead { color: var(--muted); margin: 0 0 24px; }
@@ -49,7 +58,7 @@ label.check { font-weight: 400; display: flex; gap: 8px; align-items: flex-start
 label.check input { margin-top: 3px; }
 .optional { font-weight: 400; color: var(--muted); }
 
-input[type="text"], input[type="url"], input:not([type]) {
+input[type="text"], input[type="url"], input:not([type]), select {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -59,7 +68,7 @@ input[type="text"], input[type="url"], input:not([type]) {
   font: inherit;
 }
 
-input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 button {
   padding: 6px 14px;
@@ -82,19 +91,45 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: color-
 .status { min-height: 1.5em; margin: 6px 0 0; }
 .status.ok { color: var(--ok); }
 .status.err { color: var(--err); }
+.status.warn { color: var(--warn); }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+#instances { display: grid; gap: 12px; margin: 12px 0; }
+.instance-card { margin: 0; padding: 4px 16px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); min-width: 0; }
+.instance-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 0 12px; }
+.field-label { display: block; font-weight: 600; margin: 12px 0 4px; }
+.card-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+.instance-card .remove { padding: 4px 10px; font-size: 13px; }
+.instance-card .remove:hover { color: var(--err); border-color: var(--err); }
+
+.target { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
+
+/* With a single instance there is nothing to pick, so the instance column is hidden. */
+body:not(.multi) select.instance,
+body:not(.multi) .multi-only,
+body:not(.multi) .instance-card .remove { display: none; }
+body:not(.multi) .target { grid-template-columns: 1fr; }
+
+input.unknown { border-color: var(--warn); }
+
+.page-foot { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: 13px; }
+.page-foot span { margin-right: auto; }
 
 #rules { display: grid; gap: 8px; margin: 8px 0; }
-.rule { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 8px; align-items: center; }
+.rule { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+body:not(.multi) .rule { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; }
 .rule .arrow { color: var(--muted); }
-.rule.invalid .pattern { border-color: var(--err); }
+.rule.invalid .pattern, .rule.duplicate .pattern { border-color: var(--err); }
 
 .actions { border-top: 1px solid var(--border); padding-top: 20px; display: flex; gap: 12px; align-items: center; }
 .actions .status { margin: 0; }
 
-@media (max-width: 520px) {
+@media (max-width: 600px) {
   .row { flex-direction: column; }
-  .rule { grid-template-columns: 1fr auto; }
+  .instance-grid, .target { grid-template-columns: 1fr; }
+  .rule, body:not(.multi) .rule { grid-template-columns: minmax(0, 1fr) auto; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   .rule .arrow { display: none; }
-  .rule .preset { grid-column: 1; }
-  .rule .remove { grid-row: 1 / span 2; grid-column: 2; }
+  .rule .pattern, .rule .instance, .rule .preset { grid-column: 1; }
+  .rule .remove { grid-row: 1 / span 3; grid-column: 2; align-self: start; }
 }
