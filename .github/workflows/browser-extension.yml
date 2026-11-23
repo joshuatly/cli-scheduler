@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       zip: ${{ steps.build.outputs.zip }}
+      version: ${{ steps.build.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +41,7 @@ jobs:
           EXPECTED_VERSION="${EXPECTED_VERSION#extension-v}"
           zip=$(bash scripts/build.sh)
           echo "zip=$(basename "$zip")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p 'require("./src/manifest.json").version')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -47,26 +49,44 @@ jobs:
           path: browser-extension/dist/*.zip
           if-no-files-found: error
 
+  # Publishes extension-v<manifest version> the first time that version reaches
+  # main (or when such a tag is pushed). Later pushes with the same version
+  # only build. Bump "version" in src/manifest.json to cut a new release.
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/extension-v')
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/extension-v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    defaults:
+      run:
+        working-directory: .
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: extension-v${{ needs.build.outputs.version }}
+      ZIP: ${{ needs.build.outputs.zip }}
     steps:
+      - name: Check whether this version is already released
+        id: check
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; bump the version in manifest.json to publish a new one."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/download-artifact@v4
+        if: steps.check.outputs.exists == 'false'
         with:
           name: cli-scheduler-sender
           path: dist
 
       - name: Create GitHub release
-        working-directory: .
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          ZIP: ${{ needs.build.outputs.zip }}
+        if: steps.check.outputs.exists == 'false'
         run: |
           gh release create "$TAG" "dist/$ZIP" \
             --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
             --title "Browser extension ${TAG#extension-v}" \
             --generate-notes

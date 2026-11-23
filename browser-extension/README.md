@@ -56,15 +56,10 @@ Load `browser-extension/src/` unpacked while developing, and click the reload ic
 
 ## Release
 
-The `Browser extension` workflow (`.github/workflows/browser-extension.yml`) runs the tests and builds the zip on every pull request and push to `main` that touches `browser-extension/`. The zip is attached to the run as an artifact.
+The `Browser extension` workflow (`.github/workflows/browser-extension.yml`) runs the tests and builds the zip on every pull request and push to `main` that touches `browser-extension/`.
 
-To publish a release:
+Releases are automatic. When a push to `main` carries a `version` in `src/manifest.json` that has no release yet, the workflow tags the commit `extension-v<version>` and publishes a GitHub release named **Browser extension <version>** with the zip attached. Later pushes with the same version only build. The zip is then attached to the run as an artifact.
 
-1. Bump `version` in `src/manifest.json` and merge it to `main`.
-2. Tag that commit and push the tag:
-   ```bash
-   git tag extension-v0.2.0
-   git push origin extension-v0.2.0
-   ```
+To publish a new release, bump `version` in `src/manifest.json` (e.g. `0.1.0` → `0.2.0`) in your PR and merge it.
 
-The workflow checks that the tag matches the manifest version, builds the zip and creates a GitHub release named **Browser extension 0.2.0** with the zip attached. You can also run the workflow by hand from the Actions tab to get a build without releasing.
+You can also run the workflow by hand from the Actions tab: on `main` it releases the current version if it isn't released yet; on another branch it only builds.
