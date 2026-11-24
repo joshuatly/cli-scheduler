@@ -64,14 +64,38 @@ function addInstanceCard(inst) {
   syncPlaceholder();
   card.querySelector(".serverUrl").addEventListener("input", syncPlaceholder);
   card.addEventListener("input", () => {
+    updateSummary(card);
     refreshInstanceSelects();
     updateTry();
   });
   card.querySelector(".test").addEventListener("click", () => testInstance(card));
   card.querySelector(".remove").addEventListener("click", () => removeInstance(card));
   instancesEl.append(card);
-  ensureDatalist(inst.id);
+  updateSummary(card);
   return card;
+}
+
+/** The one-line summary shown while a card is folded: name, address, connection state. */
+function updateSummary(card) {
+  const name = card.querySelector(".name").value.trim();
+  const raw = card.querySelector(".serverUrl").value.trim();
+  const url = raw ? safeNormalize(raw) : "";
+  card.querySelector(".summary-name").textContent = name || (url ? defaultInstanceName(url) : "New instance");
+  card.querySelector(".summary-url").textContent = name && url ? url : "";
+}
+
+const SHORT_STATE = {
+  idle: () => "Not connected yet",
+  pending: () => "Connecting…",
+  err: () => "Can't connect",
+  ok: (n) => `${n} preset${n === 1 ? "" : "s"}`,
+};
+
+/** Record a card's connection state, in its status line and in its folded summary. */
+function setCardState(card, state, detail, count = 0) {
+  card.dataset.state = state;
+  setStatus(card.querySelector(".testStatus"), detail, state === "ok" || state === "err" ? state : "");
+  card.querySelector(".summary-state").textContent = SHORT_STATE[state](count);
 }
 
 function safeNormalize(url) {
@@ -101,7 +125,6 @@ function removeInstance(card) {
   ruleRows.forEach((row) => row.remove());
   if ($("defaultInstance").value === id) $("defaultPreset").value = "";
   card.remove();
-  document.getElementById("presets-" + id)?.remove();
   refreshInstanceSelects();
   updateTry();
   setStatus($("saveStatus"), `Removed "${label}". Press Save to keep the change.`);
@@ -118,68 +141,81 @@ function refreshInstanceSelects() {
     );
     select.value = instances.some((i) => i.id === current) ? current : instances[0]?.id || "";
     delete select.dataset.want;
-    linkPresetInput(select);
+    syncPresetSelect(select);
   }
 }
 
-/** Point the preset box next to an instance picker at that instance's preset list. */
-function linkPresetInput(select) {
-  const input = select.parentElement.querySelector("input.preset");
-  if (!input) return;
-  input.setAttribute("list", "presets-" + select.value);
-  markUnknownPreset(input, select.value);
+function option(value, text, extra = {}) {
+  return Object.assign(document.createElement("option"), { value, textContent: text, ...extra });
 }
 
-/** Flag a preset that the chosen instance doesn't have (only once we know its list). */
-function markUnknownPreset(input, instanceId) {
-  const known = presetsByInstance[instanceId];
-  const name = input.value.trim();
-  const unknown = Boolean(name && known && known.length && !known.includes(name));
-  input.classList.toggle("unknown", unknown);
-  input.title = unknown ? `"${name}" is not a preset on ${instanceLabel(readInstances().find((i) => i.id === instanceId))}` : "";
+/**
+ * Fill a preset dropdown with one instance's presets. A saved preset that
+ * isn't on the list (the server is offline, or the preset was renamed) stays
+ * selectable and is marked, so loading the page never loses a setting.
+ */
+function fillPresetSelect(select, instanceId, value = select.value) {
+  const known = presetsByInstance[instanceId] || [];
+  const label = instanceLabel(readInstances().find((i) => i.id === instanceId));
+  const missing = Boolean(value) && !known.includes(value);
+  const options = [option("", "Choose a preset"), ...known.map((name) => option(name, name))];
+  if (missing) options.push(option(value, known.length ? `${value} (not on ${label})` : value));
+  if (!known.length) options.push(option("", `No presets from ${label} yet. Test its connection.`, { disabled: true }));
+  select.replaceChildren(...options);
+  select.value = value || "";
+  const unknown = missing && known.length > 0;
+  select.classList.toggle("unknown", unknown);
+  select.classList.toggle("empty", !select.value);
+  select.title = unknown ? `"${value}" is not a preset on ${label}` : "";
 }
 
-function ensureDatalist(id) {
-  let list = document.getElementById("presets-" + id);
-  if (!list) {
-    list = Object.assign(document.createElement("datalist"), { id: "presets-" + id });
-    $("datalists").append(list);
-  }
-  return list;
+/**
+ * Refill the preset dropdown next to an instance picker. When the instance
+ * was just changed, a preset the new instance doesn't have is cleared.
+ */
+function syncPresetSelect(instanceSelect, { instanceChanged = false } = {}) {
+  const select = instanceSelect.parentElement.querySelector("select.preset");
+  if (!select) return;
+  let value = select.value || select.dataset.want || "";
+  delete select.dataset.want;
+  const known = presetsByInstance[instanceSelect.value] || [];
+  if (instanceChanged && value && known.length && !known.includes(value)) value = "";
+  fillPresetSelect(select, instanceSelect.value, value);
 }
 
-function fillDatalist(id, names) {
-  ensureDatalist(id).replaceChildren(...names.map((name) => Object.assign(document.createElement("option"), { value: name })));
+/** After the user picks a preset: drop the "(not on …)" entry and the placeholder styling. */
+function presetPicked(select) {
+  const instanceSelect = select.parentElement.querySelector("select.instance");
+  fillPresetSelect(select, instanceSelect.value, select.value);
 }
 
 async function rememberPresets(id, names) {
   presetsByInstance[id] = names;
-  fillDatalist(id, names);
   // Write the whole map (not read-modify-write), so parallel loads can't drop each other's lists.
   const current = readInstances().map((i) => i.id);
   await chrome.storage.local.set({
     presetCache: Object.fromEntries(current.map((i) => [i, presetsByInstance[i] || []])),
   });
-  document.querySelectorAll("select.instance").forEach(linkPresetInput);
+  document.querySelectorAll("select.instance").forEach((s) => syncPresetSelect(s));
   updateTry();
 }
 
 async function loadPresetsFor(card) {
-  const status = card.querySelector(".testStatus");
   let serverUrl;
   try {
     serverUrl = normalizeServerUrl(card.querySelector(".serverUrl").value);
   } catch (err) {
-    setStatus(status, err.message, "err");
+    setCardState(card, "err", err.message);
     return null;
   }
+  setCardState(card, "pending", "Connecting…");
   try {
     const names = await fetchPresets(serverUrl);
     await rememberPresets(card.dataset.id, names);
-    setStatus(status, `Connected. ${names.length} preset${names.length === 1 ? "" : "s"}: ${names.join(", ")}`, "ok");
+    setCardState(card, "ok", `Connected. ${names.length} preset${names.length === 1 ? "" : "s"}: ${names.join(", ")}`, names.length);
     return names;
   } catch (err) {
-    setStatus(status, err.message, "err");
+    setCardState(card, "err", err.message);
     return null;
   }
 }
@@ -190,17 +226,16 @@ function requestAccess(origins) {
 }
 
 function testInstance(card) {
-  const status = card.querySelector(".testStatus");
   let serverUrl;
   try {
     serverUrl = normalizeServerUrl(card.querySelector(".serverUrl").value);
   } catch (err) {
-    return setStatus(status, err.message, "err");
+    return setCardState(card, "err", err.message);
   }
   const granted = requestAccess([originPattern(serverUrl)]);
-  setStatus(status, "Connecting…");
+  setCardState(card, "pending", "Connecting…");
   granted.then((ok) => {
-    if (!ok) return setStatus(status, "Chrome permission to reach the server was not granted.", "err");
+    if (!ok) return setCardState(card, "err", "Chrome permission to reach the server was not granted.");
     return loadPresetsFor(card);
   });
 }
@@ -210,16 +245,16 @@ function testInstance(card) {
 function addRuleRow(rule = { pattern: "", instanceId: "", preset: "" }) {
   const row = $("ruleTemplate").content.firstElementChild.cloneNode(true);
   row.querySelector(".pattern").value = rule.pattern;
-  row.querySelector(".preset").value = rule.preset;
+  row.querySelector(".preset").dataset.want = rule.preset;
   row.querySelector(".instance").dataset.want = rule.instanceId || $("defaultInstance").value;
   row.querySelector(".remove").addEventListener("click", () => {
     row.remove();
     validateRules();
     updateTry();
   });
-  row.querySelector(".instance").addEventListener("change", (e) => linkPresetInput(e.target));
+  row.querySelector(".instance").addEventListener("change", (e) => syncPresetSelect(e.target, { instanceChanged: true }));
+  row.querySelector(".preset").addEventListener("change", (e) => presetPicked(e.target));
   row.addEventListener("input", () => {
-    markUnknownPreset(row.querySelector(".preset"), row.querySelector(".instance").value);
     validateRules();
     updateTry();
   });
@@ -299,12 +334,9 @@ async function load() {
 
   instancesEl.replaceChildren();
   rulesEl.replaceChildren();
-  s.instances.forEach((inst) => {
-    addInstanceCard(inst);
-    fillDatalist(inst.id, presetsByInstance[inst.id] || []);
-  });
+  s.instances.forEach((inst) => addInstanceCard(inst));
   $("defaultInstance").dataset.want = s.defaultTarget.instanceId;
-  $("defaultPreset").value = s.defaultTarget.preset;
+  $("defaultPreset").dataset.want = s.defaultTarget.preset;
   $("defaultAction").value = s.defaultAction;
   syncDefaultAction();
   refreshInstanceSelects();
@@ -312,14 +344,19 @@ async function load() {
   $("presetSubmenu").checked = s.presetSubmenu;
   $("notifyOnSuccess").checked = s.notifyOnSuccess;
 
+  // Instances set up before stay folded to one line; one that has never been
+  // connected (such as the localhost placeholder on a fresh install) opens.
   for (const inst of s.instances) {
+    const card = cardFor(inst.id);
+    let allowed = false;
     try {
-      if (await chrome.permissions.contains({ origins: [originPattern(inst.serverUrl)] })) {
-        loadPresetsFor(cardFor(inst.id));
-      }
+      allowed = await chrome.permissions.contains({ origins: [originPattern(inst.serverUrl)] });
     } catch {
       // Malformed stored URL; the user will fix it.
     }
+    card.open = !allowed;
+    if (allowed) loadPresetsFor(card);
+    else setCardState(card, "idle", "");
   }
 }
 
@@ -364,6 +401,7 @@ async function save(settings, granted) {
     const card = cardFor(inst.id);
     card.querySelector(".serverUrl").value = inst.serverUrl;
     card.querySelector(".name").value = inst.name;
+    updateSummary(card);
   }
   refreshInstanceSelects();
 
@@ -376,22 +414,31 @@ async function save(settings, granted) {
   if (!ok) {
     return setStatus(status, "Saved, but Chrome permission to reach the schedulers was not granted, so sending won't work.", "err");
   }
-  await Promise.all(settings.instances.map((inst) => loadPresetsFor(cardFor(inst.id))));
+  const results = await Promise.all(settings.instances.map((inst) => loadPresetsFor(cardFor(inst.id))));
+  // Fold instances that saved and connected; keep the others open to fix.
+  settings.instances.forEach((inst, i) => {
+    if (results[i]) cardFor(inst.id).open = false;
+  });
   await chrome.runtime.sendMessage({ type: "rebuild-menus" });
+  const failed = results.filter((r) => !r).length;
+  if (failed) {
+    return setStatus(status, `Saved, but ${failed === 1 ? "one instance" : `${failed} instances`} couldn't be reached. See ${failed === 1 ? "its" : "their"} status above.`, "warn");
+  }
   setStatus(status, "Saved.", "ok");
 }
 
 $("addInstance").addEventListener("click", () => {
   const id = newInstanceId(readInstances().map((i) => i.id));
   const card = addInstanceCard({ id, name: "", serverUrl: "", cwd: "" });
-  fillDatalist(id, []);
+  card.open = true;
+  setCardState(card, "idle", "");
   refreshInstanceSelects();
   card.querySelector(".name").focus();
 });
 $("addRule").addEventListener("click", () => addRuleRow().querySelector(".pattern").focus());
 $("tryUrl").addEventListener("input", updateTry);
-$("defaultPreset").addEventListener("input", () => {
-  markUnknownPreset($("defaultPreset"), $("defaultInstance").value);
+$("defaultPreset").addEventListener("change", (e) => {
+  presetPicked(e.target);
   updateTry();
 });
 $("defaultAction").addEventListener("change", () => {
@@ -399,7 +446,7 @@ $("defaultAction").addEventListener("change", () => {
   updateTry();
 });
 $("defaultInstance").addEventListener("change", (e) => {
-  linkPresetInput(e.target);
+  syncPresetSelect(e.target, { instanceChanged: true });
   updateTry();
 });
 

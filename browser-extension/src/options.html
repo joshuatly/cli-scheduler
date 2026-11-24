@@ -19,7 +19,7 @@
 
     <section>
       <h2>Scheduler instances</h2>
-      <p class="hint">Add every scheduler you run. Chrome will ask once for permission to reach each address. The computer running Chrome must be listed in each scheduler's <code>allowed_ips</code>.</p>
+      <p class="hint">Click an instance to edit it. Chrome asks once for permission to reach each address, and each scheduler's <code>allowed_ips</code> must include this computer.</p>
       <div id="instances"></div>
       <button id="addInstance" type="button" class="secondary">Add instance</button>
     </section>
@@ -36,7 +36,7 @@
         <label for="defaultPreset">Default preset</label>
         <div class="target" id="defaultTargetRow">
           <select id="defaultInstance" class="instance" aria-label="Instance for the default preset"></select>
-          <input id="defaultPreset" class="preset" placeholder="Used when no rule below matches" spellcheck="false">
+          <select id="defaultPreset" class="preset" aria-label="Default preset"></select>
         </div>
       </div>
 
@@ -69,33 +69,40 @@
     </footer>
   </main>
 
-  <div id="datalists" hidden></div>
-
   <template id="instanceTemplate">
-    <fieldset class="instance-card">
-      <legend class="visually-hidden">Scheduler instance</legend>
-      <div class="instance-grid">
-        <div class="field">
-          <label class="field-label">Name</label>
-          <input class="name" type="text" spellcheck="false" placeholder="e.g. Home server">
-        </div>
-        <div class="field">
-          <label class="field-label">Server address</label>
-          <div class="row">
-            <input class="serverUrl" type="url" placeholder="http://192.168.1.10:5000" autocomplete="off" spellcheck="false">
-            <button class="test" type="button">Test connection</button>
+    <details class="instance-card" data-state="idle">
+      <summary class="instance-summary">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="summary-name"></span>
+        <span class="summary-url"></span>
+        <span class="summary-state"></span>
+        <span class="summary-edit">Edit</span>
+        <span class="chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="instance-body">
+        <div class="instance-grid">
+          <div class="field">
+            <label class="field-label">Name</label>
+            <input class="name" type="text" spellcheck="false" placeholder="e.g. Home server">
+          </div>
+          <div class="field">
+            <label class="field-label">Server address</label>
+            <div class="row">
+              <input class="serverUrl" type="url" placeholder="http://192.168.1.10:5000" autocomplete="off" spellcheck="false">
+              <button class="test" type="button">Test connection</button>
+            </div>
           </div>
         </div>
+        <p class="status testStatus" role="status"></p>
+        <div class="field">
+          <label class="field-label">Working directory <span class="optional">(optional)</span></label>
+          <input class="cwd" type="text" placeholder="Leave empty to use the preset's or the scheduler's default" spellcheck="false">
+        </div>
+        <div class="card-actions">
+          <button class="remove secondary" type="button">Remove instance</button>
+        </div>
       </div>
-      <p class="status testStatus" role="status"></p>
-      <div class="field">
-        <label class="field-label">Working directory <span class="optional">(optional)</span></label>
-        <input class="cwd" type="text" placeholder="Leave empty to use the preset's or the scheduler's default" spellcheck="false">
-      </div>
-      <div class="card-actions">
-        <button class="remove secondary" type="button">Remove instance</button>
-      </div>
-    </fieldset>
+    </details>
   </template>
 
   <template id="ruleTemplate">
@@ -103,7 +110,7 @@
       <input class="pattern" type="text" placeholder="example.com" aria-label="Domain pattern" spellcheck="false">
       <span class="arrow" aria-hidden="true">→</span>
       <select class="instance" aria-label="Instance"></select>
-      <input class="preset" placeholder="Preset" aria-label="Preset" spellcheck="false">
+      <select class="preset" aria-label="Preset"></select>
       <button class="remove secondary" type="button" aria-label="Remove rule">Remove</button>
     </div>
   </template>

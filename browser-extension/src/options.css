@@ -94,10 +94,37 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: color-
 .status.err { color: var(--err); }
 .status.warn { color: var(--warn); }
 
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#instances { display: grid; gap: 8px; margin: 12px 0; }
+.instance-card { border: 1px solid var(--border); border-radius: 8px; background: var(--card); min-width: 0; }
 
-#instances { display: grid; gap: 12px; margin: 12px 0; }
-.instance-card { margin: 0; padding: 4px 16px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); min-width: 0; }
+/* Folded: one line with the name, address and connection state. Click to edit. */
+.instance-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 8px;
+  user-select: none;
+}
+.instance-summary::-webkit-details-marker { display: none; }
+.instance-summary:hover { background: color-mix(in srgb, var(--muted) 10%, transparent); }
+.instance-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.instance-card[open] > .instance-summary { border-radius: 8px 8px 0 0; }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.instance-card[data-state="ok"] .dot { background: var(--ok); }
+.instance-card[data-state="err"] .dot { background: var(--err); }
+.instance-card[data-state="pending"] .dot { background: var(--warn); }
+.summary-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.summary-url { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 0; }
+.summary-state { color: var(--muted); white-space: nowrap; font-size: 13px; margin-left: auto; }
+.instance-card[data-state="err"] .summary-state { color: var(--err); }
+.summary-edit { color: var(--accent); font-size: 13px; }
+.instance-card[open] .summary-edit { display: none; }
+.chevron { flex: none; width: 7px; height: 7px; margin: 0 2px 3px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform 0.15s; }
+.instance-card[open] .chevron { transform: rotate(-135deg); margin-bottom: -3px; }
+.instance-body { padding: 0 16px 12px; border-top: 1px solid var(--border); }
 .instance-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 0 12px; }
 .field-label { display: block; font-weight: 600; margin: 12px 0 4px; }
 .card-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
@@ -112,7 +139,10 @@ body:not(.multi) .multi-only,
 body:not(.multi) .instance-card .remove { display: none; }
 body:not(.multi) .target { grid-template-columns: 1fr; }
 
-input.unknown { border-color: var(--warn); }
+select.unknown { border-color: var(--warn); }
+/* "Choose a preset" reads as a placeholder; the list itself stays normal. */
+select.empty { color: var(--muted); }
+select.empty option { color: var(--fg); }
 .highlight { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; transition: outline-color 0.3s; }
 select.narrow { width: auto; min-width: 16em; max-width: 100%; }
 
@@ -130,6 +160,7 @@ body:not(.multi) .rule { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1f
 
 @media (max-width: 600px) {
   .row { flex-direction: column; }
+  .summary-url, .summary-edit { display: none; }
   .instance-grid, .target { grid-template-columns: 1fr; }
   .rule, body:not(.multi) .rule { grid-template-columns: minmax(0, 1fr) auto; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   .rule .arrow { display: none; }

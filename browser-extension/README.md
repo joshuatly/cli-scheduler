@@ -11,6 +11,8 @@ Works in Chrome 116+ and other Chromium browsers (Edge, Brave). No changes to th
 3. The settings page opens. Enter the scheduler address (e.g. `http://192.168.1.10:5000`), click **Test connection**, allow the permission prompt, choose what happens when no rule matches (a default preset, or **Do nothing**), and click **Save**.
 4. To add another scheduler, click **Add instance**, give it a name and an address, and click **Save** again. Chrome asks once for permission to reach each new address.
 
+Once an instance is saved and connected, it folds to one line showing its name, address and how many presets it has (or **Can't connect** in red). Click the line to edit it.
+
 The computer running Chrome must be allowed by each scheduler's `allowed_ips` in `config.json`, otherwise sending fails with a 403 error.
 
 The settings page links to this repository, its issues and its releases.
@@ -58,7 +60,7 @@ When a link isn't sent because nothing matched, the notification **Not sent: no 
 
 Nothing changes until you press **Save**. If the settings page is already open, it's reused, with any unsaved edits kept. Use **Check which preset a URL gets** on the settings page to try it out. It also warns when the chosen instance has no preset with that name.
 
-Each rule, and the default, sends to **one preset on one instance**: with several instances, every rule has an instance picker next to its preset, and the preset suggestions come from that instance. Two rules for the same address (`youtube.com` and `https://www.youtube.com/`, for example) can't be saved, so a domain never goes to two places. A different path (`youtube.com/playlist`) is a different address and can point at another instance. Removing an instance also removes the rules that send to it, after asking.
+Each rule, and the default, sends to **one preset on one instance**: with several instances, every rule has an instance picker next to its preset picker, and the preset picker lists only that instance's presets. If a saved preset is no longer on its instance (it was renamed, say), it stays selected and is marked **(not on …)** until you pick another. Two rules for the same address (`youtube.com` and `https://www.youtube.com/`, for example) can't be saved, so a domain never goes to two places. A different path (`youtube.com/playlist`) is a different address and can point at another instance. Removing an instance also removes the rules that send to it, after asking.
 
 Settings are stored in `chrome.storage.sync`, so they follow your Chrome profile across computers. Each instance has its own optional working directory, since paths differ between machines.
 
