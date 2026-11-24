@@ -17,8 +17,11 @@ import {
   originPattern,
   originPatterns,
   parsePattern,
+  parseSetupHash,
   presetMenuEntries,
   resolveTarget,
+  setupHash,
+  suggestPattern,
   submitJob,
   validateSettings,
 } from "../src/lib.js";
@@ -354,4 +357,32 @@ test("fetchPresets returns names", async () => {
 
 test("describeFailure falls back to the status code", () => {
   assert.equal(describeFailure(418, null), "The scheduler answered with HTTP 418.");
+});
+
+// --- Unmatched-link guidance ----------------------------------------------------
+
+test("suggestPattern offers the link's site, and that rule then matches the link", () => {
+  const cases = {
+    "https://www.youtube.com/watch?v=1": "youtube.com",
+    "https://music.youtube.com/playlist?list=1": "music.youtube.com",
+    "http://Example.ORG.:8080/a/b": "example.org",
+    "https://192.168.1.20/x": "192.168.1.20",
+  };
+  for (const [url, pattern] of Object.entries(cases)) {
+    assert.equal(suggestPattern(url), pattern, url);
+    const rule = { pattern: suggestPattern(url), instanceId: "home", preset: "P" };
+    assert.equal(resolveTarget(url, [rule], null).preset, "P", url);
+  }
+  assert.equal(suggestPattern("not a url"), "");
+});
+
+test("setupHash round-trips URLs with query strings and fragments", () => {
+  const url = "https://example.com/a?b=1&c=two words#frag";
+  for (const step of ["rule", "default"]) {
+    const hash = setupHash(step, url);
+    assert.ok(hash.startsWith("#setup=" + step));
+    assert.deepEqual(parseSetupHash(hash), { step, url });
+  }
+  assert.equal(parseSetupHash(""), null);
+  assert.equal(parseSetupHash("#setup=delete-everything&url=x"), null);
 });

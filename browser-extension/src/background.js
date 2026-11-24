@@ -5,6 +5,8 @@ import {
   fetchPresets,
   isSendableUrl,
   migrateSettings,
+  setupHash,
+  suggestPattern,
   normalizePresetCache,
   originPattern,
   presetMenuEntries,
@@ -167,12 +169,7 @@ async function send(url, explicit) {
   }
 
   const target = explicit || resolveTarget(url, settings.rules, effectiveDefault(settings));
-  if (!target.preset) {
-    // "Do nothing" was chosen for unmatched URLs: send nothing and raise no error.
-    // A brief grey badge shows the click was received.
-    if (settings.defaultAction === "none") return flashBadge("–", "#6e7781");
-    return notifyError("No preset matched and no default preset is set. Open settings to choose one.", null, "options");
-  }
+  if (!target.preset) return notifyUnmatched(url);
   const instance = settings.instances.find((i) => i.id === target.instanceId);
   if (!instance) {
     return notifyError("The preset points at a scheduler instance that was removed. Open settings to fix it.", null, "options");
@@ -214,6 +211,44 @@ function notifyError(message, url, action) {
   notify(action === "options" ? "options:" + Date.now() : "", "CLI Scheduler: not sent", url ? `${message}\n${url}` : message);
 }
 
+/**
+ * Nothing matched and there is no default: send nothing, and say how to fix
+ * that next time. The id carries the URL, so the buttons still work after the
+ * service worker has been stopped and restarted.
+ */
+function notifyUnmatched(url) {
+  const site = suggestPattern(url);
+  flashBadge("–", "#6e7781");
+  chrome.notifications.create("unmatched:" + url, {
+    type: "basic",
+    iconUrl: ICON,
+    title: `Not sent: no rule for ${site}`,
+    message: `Add a rule to send ${site} links to a preset, or set a default preset for links that have no rule.`,
+    contextMessage: url.slice(0, 200),
+    buttons: [{ title: `Add a rule for ${site}` }, { title: "Set a default preset" }],
+  });
+}
+
+/**
+ * Show the settings page at a setup step. An open settings tab handles the
+ * step itself (keeping any unsaved edits); otherwise a new tab opens.
+ */
+async function openSetup(step, url) {
+  try {
+    const reply = await chrome.runtime.sendMessage({ type: "setup", step, url });
+    if (reply && reply.ok) return;
+  } catch {
+    // No settings page is open.
+  }
+  const page = chrome.runtime.getURL("options.html" + setupHash(step, url));
+  try {
+    await chrome.tabs.create({ url: page });
+  } catch {
+    // No browser window is open (e.g. all windows closed on macOS).
+    await chrome.windows.create({ url: page, focused: true });
+  }
+}
+
 function flashBadge(text, color) {
   chrome.action.setBadgeBackgroundColor({ color });
   chrome.action.setBadgeText({ text });
@@ -222,6 +257,13 @@ function flashBadge(text, color) {
 
 chrome.notifications.onClicked.addListener((id) => {
   if (id.startsWith("open:")) chrome.tabs.create({ url: id.slice("open:".length) });
+  else if (id.startsWith("unmatched:")) openSetup("rule", id.slice("unmatched:".length));
   else if (id.startsWith("options:")) chrome.runtime.openOptionsPage();
+  chrome.notifications.clear(id);
+});
+
+chrome.notifications.onButtonClicked.addListener((id, index) => {
+  if (!id.startsWith("unmatched:")) return;
+  openSetup(index === 0 ? "rule" : "default", id.slice("unmatched:".length));
   chrome.notifications.clear(id);
 });

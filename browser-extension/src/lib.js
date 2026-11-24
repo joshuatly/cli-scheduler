@@ -286,6 +286,31 @@ export function resolveTarget(rawUrl, rules, defaultTarget) {
   return best ? { instanceId: best.instanceId, preset: best.preset, rule: best } : fallback;
 }
 
+/**
+ * The rule pattern to offer for a URL that nothing matched: its host without
+ * "www.", e.g. "music.youtube.com". Empty for URLs that can't be parsed.
+ */
+export function suggestPattern(rawUrl) {
+  try {
+    return new URL(rawUrl).hostname.toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+/** Options-page address that opens a setup step: "rule" (add a rule for url) or "default". */
+export function setupHash(step, url) {
+  return "#" + new URLSearchParams({ setup: step, url: url || "" }).toString();
+}
+
+/** Read setupHash() back. Returns { step, url } or null. */
+export function parseSetupHash(hash) {
+  const params = new URLSearchParams(String(hash || "").replace(/^#/, ""));
+  const step = params.get("setup");
+  if (step !== "rule" && step !== "default") return null;
+  return { step, url: params.get("url") || "" };
+}
+
 // --- Labels -----------------------------------------------------------------
 
 /**

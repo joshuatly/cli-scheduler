@@ -47,9 +47,16 @@ Clicking the toolbar icon opens the settings.
 | Setting | What happens to an unmatched link |
 |---|---|
 | **Send to a default preset** | It's sent to the default preset on the chosen instance. |
-| **Do nothing** | Nothing is sent and no error is shown. The toolbar icon briefly shows a grey **–** so you can tell the click was received. |
+| **Do nothing** | Nothing is sent. A notification says no rule matched and offers two buttons (see below). |
 
-With the submenu off, **Do nothing** makes the menu item act only on links that a rule covers. With it on, **Auto (domain rules)** behaves the same way, and you can still pick any preset by hand. Use **Check which preset a URL gets** on the settings page to try it out. It also warns when the chosen instance has no preset with that name.
+With the submenu off, **Do nothing** makes the menu item act only on links that a rule covers. With it on, **Auto (domain rules)** behaves the same way, and you can still pick any preset by hand.
+
+When a link isn't sent because nothing matched, the notification **Not sent: no rule for example.org** has two buttons:
+
+- **Add a rule for example.org** opens the settings with a new rule for that site already filled in. The cursor is in its preset box, so you only pick the preset (and the instance, with several) and press **Save**. Clicking the notification itself does the same.
+- **Set a default preset** opens the settings with **When no rule matches** switched to **Send to a default preset** and the cursor in the preset box.
+
+Nothing changes until you press **Save**. If the settings page is already open, it's reused, with any unsaved edits kept. Use **Check which preset a URL gets** on the settings page to try it out. It also warns when the chosen instance has no preset with that name.
 
 Each rule, and the default, sends to **one preset on one instance**: with several instances, every rule has an instance picker next to its preset, and the preset suggestions come from that instance. Two rules for the same address (`youtube.com` and `https://www.youtube.com/`, for example) can't be saved, so a domain never goes to two places. A different path (`youtube.com/playlist`) is a different address and can point at another instance. Removing an instance also removes the rules that send to it, after asking.
 

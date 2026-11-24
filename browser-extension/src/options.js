@@ -13,7 +13,9 @@ import {
   originPattern,
   originPatterns,
   parsePattern,
+  parseSetupHash,
   resolveTarget,
+  suggestPattern,
   validateSettings,
 } from "./lib.js";
 
@@ -401,7 +403,74 @@ $("defaultInstance").addEventListener("change", (e) => {
   updateTry();
 });
 
+// --- Setup steps from the "Not sent: no rule" notification --------------------
+
+function highlight(el) {
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  el.classList.add("highlight");
+  setTimeout(() => el.classList.remove("highlight"), 2500);
+}
+
+/**
+ * "rule": add a rule for the URL's site (or reuse one already on the page)
+ * and put the cursor in its preset box. "default": switch to sending
+ * unmatched links to a default preset and put the cursor there.
+ * Nothing is saved until the user presses Save.
+ */
+function applySetup(step, url) {
+  const status = $("saveStatus");
+  if (url) $("tryUrl").value = url;
+  if (step === "default") {
+    $("defaultAction").value = "preset";
+    syncDefaultAction();
+    updateTry();
+    highlight($("defaultPresetField"));
+    $("defaultPreset").focus({ preventScroll: true });
+    const kept = $("defaultPreset").value.trim();
+    return setStatus(status, kept ? `Check the default preset ("${kept}"), then press Save.` : "Choose a default preset, then press Save.");
+  }
+  const site = suggestPattern(url);
+  const parsed = parsePattern(site);
+  const key = parsed && parsed.host + parsed.path;
+  let row = [...rulesEl.querySelectorAll(".rule")].find((r) => {
+    const p = parsePattern(r.querySelector(".pattern").value);
+    return p && p.host + p.path === key;
+  });
+  if (!row) row = addRuleRow({ pattern: site, instanceId: $("defaultInstance").value, preset: "" });
+  updateTry();
+  highlight(row);
+  row.querySelector(".preset").focus({ preventScroll: true });
+  setStatus(status, `Choose ${document.body.classList.contains("multi") ? "an instance and a preset" : "a preset"} for ${site}, then press Save.`);
+}
+
+/** Bring this settings tab to the front. */
+async function focusThisTab() {
+  const tab = await chrome.tabs.getCurrent();
+  if (!tab) return;
+  await chrome.tabs.update(tab.id, { active: true });
+  await chrome.windows.update(tab.windowId, { focused: true });
+}
+
 $("version").textContent = `Version ${chrome.runtime.getManifest().version}`;
 $("repoLink").href = REPO_URL;
 
-load();
+const ready = load();
+
+// Opened from a notification: options.html#setup=rule&url=…
+ready.then(() => {
+  const setup = parseSetupHash(location.hash);
+  if (!setup) return;
+  history.replaceState(null, "", location.pathname); // so a reload doesn't repeat it
+  applySetup(setup.step, setup.url);
+});
+
+// Already open when a notification is clicked: the service worker asks this tab.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (!message || message.type !== "setup") return false;
+  ready.then(() => {
+    applySetup(message.step, message.url);
+    focusThisTab();
+    sendResponse({ ok: true });
+  });
+  return true;
+});
