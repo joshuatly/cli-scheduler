@@ -8,6 +8,8 @@ import {
   describeTarget,
   effectiveDefault,
   fetchPresets,
+  PRESETS_TIMEOUT_MS,
+  SUBMIT_TIMEOUT_MS,
   instanceLabel,
   isSendableUrl,
   migrateSettings,
@@ -353,6 +355,55 @@ test("fetchPresets returns names", async () => {
   const names = await fetchPresets("http://h", fakeFetch(200, { presets: [{ name: "A" }, { name: "B" }] }));
   assert.deepEqual(names, ["A", "B"]);
   await assert.rejects(fetchPresets("http://h", fakeFetch(403, undefined)), /allowed_ips/);
+});
+
+/** A fetch that never answers until aborted, like a scheduler that is switched off. */
+function hangingFetch(capture = {}) {
+  return (url, init) =>
+    new Promise((_, reject) => {
+      capture.signal = init.signal;
+      init.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    });
+}
+
+test("submitJob gives up on a scheduler that does not answer", async () => {
+  const seen = {};
+  const started = Date.now();
+  const res = await submitJob({ serverUrl: "http://h", preset: "P", url: "https://a.com" }, hangingFetch(seen), 50);
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(res.ok, false);
+  assert.equal(res.timedOut, true);
+  assert.match(res.error, /No answer from the scheduler at http:\/\/h within 0\.1 s/);
+  assert.match(res.error, /job list/);
+  assert.equal(seen.signal.aborted, true);
+});
+
+test("submitJob times out even if fetch ignores the abort signal", async () => {
+  const deaf = () => new Promise(() => {});
+  const res = await submitJob({ serverUrl: "http://h", preset: "P", url: "https://a.com" }, deaf, 20);
+  assert.equal(res.timedOut, true);
+});
+
+test("submitJob times out on a body that never finishes", async () => {
+  const stalled = async () => ({ status: 201, ok: true, json: () => new Promise(() => {}) });
+  const res = await submitJob({ serverUrl: "http://h", preset: "P", url: "https://a.com" }, stalled, 20);
+  assert.equal(res.timedOut, true);
+});
+
+test("fetchPresets gives up on a scheduler that does not answer", async () => {
+  await assert.rejects(fetchPresets("http://h", hangingFetch(), 20), /No answer from the scheduler at http:\/\/h/);
+});
+
+test("fetchPresets reports an unreachable scheduler", async () => {
+  const offline = async () => {
+    throw new TypeError("Failed to fetch");
+  };
+  await assert.rejects(fetchPresets("http://h", offline), /Could not reach/);
+});
+
+test("default timeouts are a few seconds", () => {
+  assert.ok(PRESETS_TIMEOUT_MS >= 2000 && PRESETS_TIMEOUT_MS <= 10000);
+  assert.ok(SUBMIT_TIMEOUT_MS >= 2000 && SUBMIT_TIMEOUT_MS <= 15000);
 });
 
 test("describeFailure falls back to the status code", () => {
