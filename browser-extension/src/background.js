@@ -183,6 +183,7 @@ async function send(url, explicit) {
   }
 
   const where = describeTarget(settings.instances, instance.id, target.preset);
+  showBadge("…", "#6e7781"); // stays until the scheduler answers or the send times out
   const result = await submitJob({ serverUrl: instance.serverUrl, preset: target.preset, url, cwd: instance.cwd });
   if (!result.ok) {
     return notifyError(settings.instances.length > 1 ? `${where}: ${result.error}` : result.error, url);
@@ -249,10 +250,19 @@ async function openSetup(step, url) {
   }
 }
 
-function flashBadge(text, color) {
+let badgeTimer = null;
+
+/** Show a badge until the next one replaces it. */
+function showBadge(text, color) {
+  clearTimeout(badgeTimer);
   chrome.action.setBadgeBackgroundColor({ color });
   chrome.action.setBadgeText({ text });
-  setTimeout(() => chrome.action.setBadgeText({ text: "" }), 4000);
+}
+
+/** Show a badge for a few seconds. */
+function flashBadge(text, color) {
+  showBadge(text, color);
+  badgeTimer = setTimeout(() => chrome.action.setBadgeText({ text: "" }), 4000);
 }
 
 chrome.notifications.onClicked.addListener((id) => {

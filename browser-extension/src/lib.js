@@ -363,26 +363,89 @@ export function describeFailure(status, body) {
   return `The scheduler answered with HTTP ${status}.`;
 }
 
+/**
+ * How long to wait for a scheduler before giving up, in milliseconds. A
+ * scheduler on the local network answers in well under a second; one that is
+ * switched off or unreachable would otherwise hang until the operating
+ * system's TCP timeout, which can be minutes.
+ */
+export const PRESETS_TIMEOUT_MS = 5000;
+export const SUBMIT_TIMEOUT_MS = 8000;
+
+class RequestError extends Error {
+  constructor(message, timedOut) {
+    super(message);
+    this.timedOut = timedOut;
+  }
+}
+
+function seconds(ms) {
+  return `${Math.round(ms / 100) / 10} s`;
+}
+
+/**
+ * fetch() with a deadline that also covers reading the JSON body.
+ * Resolves to { response, body } (body is null for non-JSON); rejects with a
+ * RequestError whose message a person can act on.
+ */
+async function requestJson(fetchImpl, serverUrl, path, init, timeoutMs) {
+  const controller = new AbortController();
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(
+        new RequestError(
+          `No answer from the scheduler at ${serverUrl} within ${seconds(timeoutMs)}. Is it running and reachable from this computer?`,
+          true,
+        ),
+      );
+    }, timeoutMs);
+  });
+  const attempt = (async () => {
+    let response;
+    try {
+      response = await fetchImpl(`${serverUrl}${path}`, { ...init, signal: controller.signal });
+    } catch {
+      throw new RequestError(`Could not reach the scheduler at ${serverUrl}. Is it running?`, false);
+    }
+    let body = null;
+    try {
+      body = await response.json();
+    } catch {
+      // Non-JSON body (e.g. the HTML 403 page).
+    }
+    return { response, body };
+  })();
+  try {
+    // The race also covers a fetch that ignores the abort signal.
+    return await Promise.race([attempt, deadline]);
+  } finally {
+    clearTimeout(timer);
+    attempt.catch(() => {}); // the loser of the race must not surface as unhandled
+  }
+}
+
 /** POST one URL to the scheduler. Resolves to { ok, jobs } or { ok: false, error }. */
-export async function submitJob({ serverUrl, preset, url, cwd }, fetchImpl = fetch) {
+export async function submitJob({ serverUrl, preset, url, cwd }, fetchImpl = fetch, timeoutMs = SUBMIT_TIMEOUT_MS) {
   const payload = { preset, urls: [url] };
   if (cwd) payload.cwd = cwd;
-  let response;
+  let result;
   try {
-    response = await fetchImpl(`${serverUrl}/api/jobs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    result = await requestJson(
+      fetchImpl,
+      serverUrl,
+      "/api/jobs",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+      timeoutMs,
+    );
   } catch (err) {
-    return { ok: false, error: `Could not reach the scheduler at ${serverUrl}. Is it running?` };
+    let error = err.message;
+    // The request may have arrived before the answer stalled.
+    if (err.timedOut) error += " Check its job list before sending again.";
+    return { ok: false, error, timedOut: !!err.timedOut };
   }
-  let body = null;
-  try {
-    body = await response.json();
-  } catch {
-    // Non-JSON body (e.g. the HTML 403 page).
-  }
+  const { response, body } = result;
   if (response.status === 201 && body && Array.isArray(body.jobs)) {
     return { ok: true, jobs: body.jobs };
   }
@@ -390,19 +453,8 @@ export async function submitJob({ serverUrl, preset, url, cwd }, fetchImpl = fet
 }
 
 /** GET the preset names from the scheduler. Throws with a readable message. */
-export async function fetchPresets(serverUrl, fetchImpl = fetch) {
-  let response;
-  try {
-    response = await fetchImpl(`${serverUrl}/api/presets`);
-  } catch {
-    throw new Error(`Could not reach the scheduler at ${serverUrl}. Is it running?`);
-  }
-  let body = null;
-  try {
-    body = await response.json();
-  } catch {
-    // fall through
-  }
+export async function fetchPresets(serverUrl, fetchImpl = fetch, timeoutMs = PRESETS_TIMEOUT_MS) {
+  const { response, body } = await requestJson(fetchImpl, serverUrl, "/api/presets", {}, timeoutMs);
   if (!response.ok || !body || !Array.isArray(body.presets)) {
     throw new Error(describeFailure(response.status, body));
   }

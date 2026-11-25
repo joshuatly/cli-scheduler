@@ -32,7 +32,7 @@ With the preset submenu on (the default), each item opens a submenu: **Auto (dom
 
 With several instances, the submenu lists every instance's presets, grouped by instance and separated by lines. A preset name that exists on more than one instance is shown with the instance name, e.g. **Echo Test (Home)** and **Echo Test (NAS)**. Names that exist on one instance only are shown as they are.
 
-A notification confirms the job was queued and, with several instances, says which one (`Queued with "Audio" on NAS`); clicking it opens the job on that scheduler. Errors (server unreachable, preset not found, IP not allowed) are always shown. Only `http://` and `https://` URLs are sent.
+A notification confirms the job was queued and, with several instances, says which one (`Queued with "Audio" on NAS`); clicking it opens the job on that scheduler. While a link is being sent, the toolbar icon shows **…**. Errors (server unreachable, preset not found, IP not allowed) are always shown. A scheduler that doesn't answer within 8 seconds (5 seconds when loading presets or testing the connection) is treated as unreachable, so a switched-off or unreachable instance fails quickly instead of hanging. If a send times out, the request may still have arrived, so check that scheduler's job list before sending again. Only `http://` and `https://` URLs are sent.
 
 Clicking the toolbar icon opens the settings.
 
@@ -90,8 +90,8 @@ To publish a release:
 1. Bump `version` in `src/manifest.json` and merge it to `main`.
 2. Tag that commit and push the tag:
    ```bash
-   git tag extension-v0.2.0
-   git push origin extension-v0.2.0
+   git tag extension-v0.2.1
+   git push origin extension-v0.2.1
    ```
 
-The workflow checks that the tag matches the manifest version, builds the zip and creates a GitHub release named **Browser extension 0.2.0** with the zip attached. You can also run the workflow by hand from the Actions tab to get a build without releasing.
+The workflow checks that the tag matches the manifest version, builds the zip and creates a GitHub release named **Browser extension 0.2.1** with the zip attached. You can also run the workflow by hand from the Actions tab to get a build without releasing.
