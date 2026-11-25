@@ -90,8 +90,8 @@ To publish a release:
 1. Bump `version` in `src/manifest.json` and merge it to `main`.
 2. Tag that commit and push the tag:
    ```bash
-   git tag extension-v0.2.0
-   git push origin extension-v0.2.0
+   git tag extension-v0.2.1
+   git push origin extension-v0.2.1
    ```
 
-The workflow checks that the tag matches the manifest version, builds the zip and creates a GitHub release named **Browser extension 0.2.0** with the zip attached. You can also run the workflow by hand from the Actions tab to get a build without releasing.
+The workflow checks that the tag matches the manifest version, builds the zip and creates a GitHub release named **Browser extension 0.2.1** with the zip attached. You can also run the workflow by hand from the Actions tab to get a build without releasing.
